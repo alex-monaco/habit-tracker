@@ -8,4 +8,5 @@ plotly==6.7.0
 scipy==1.17.1
 streamlit-plotly-events==0.0.6
 pytest==9.0.3
+pytest-cov==6.1.0
 ruff==0.15.10
