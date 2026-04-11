@@ -25,6 +25,7 @@ habit-tracker/
 ├── app.py                         # Streamlit entry point (page navigation)
 ├── helpers.py                     # Shared: color constants, streak/slope/trend funcs, HTML table builder
 ├── sidebar.py                     # Shared sidebar: extract + reload buttons
+├── drive_sync.py                  # Google Drive read/write helpers (service account)
 ├── requirements.txt
 ├── __init__.py
 ├── extract_habits.py              # CLI: Obsidian notes -> JSON
@@ -70,8 +71,9 @@ python3 -m streamlit run app.py
 - `app.py` uses `st.navigation()` / `st.Page()` for multi-page routing
 - `helpers.py` contains shared color constants (`RED`, `YELLOW`, `GREEN`, `MUTED`), analysis functions (`rate_color`, `compute_streak`, `compute_slope`, `trend_label`), and HTML table utilities (`TD_STYLE`, `html_table_open`, `html_table_close`)
 - `sidebar.py` is shared between pages (Streamlit puts the app directory on sys.path, so pages can `from helpers import ...` and `from sidebar import ...` directly)
-- Both pages load data via `data_loader.fetch_raw_habits()`: fetches from a private GitHub repo when `GH_TOKEN` is in secrets, otherwise reads local `data/habits.json` (falling back to `data/habits.example.json`)
-- The "Extract latest" sidebar button (local mode only) runs `extract_habits.py` for new days since the last data point, then clears cache and reruns
+- Both pages load data via `data_loader.load_habits()`, which delegates to `current_mode()` (`demo` / `supabase` / `local`). Views and the sidebar must never branch on the backend — call `data_loader` functions instead.
+- `supabase_sync.py` owns all Supabase I/O (reads/writes rows in the `habit_data` table keyed by filename); credentials come from `st.secrets["SUPABASE_URL"]` / `SUPABASE_KEY`
+- The "Extract latest" sidebar button runs `extract_habits.py` to update local `data/habits.json`, then calls `data_loader.persist_habits_after_extract()` which pushes to Supabase when in that mode. The button is hidden when `data_loader.can_run_extraction()` is false (e.g. cloud deploy with `REMOTE_MODE` set, or demo session).
 
 ### Page 1: Weekly Review (`week_review.py`)
 
