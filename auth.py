@@ -16,11 +16,19 @@ def require_auth() -> None:
         )
         st.stop()
 
+    if st.session_state.get("demo_mode"):
+        return
+
     if not st.user.is_logged_in:
         st.title("Habit Tracker")
         st.write("Sign in to continue.")
         if st.button("Sign in with Google"):
             st.login()
+        st.divider()
+        st.caption("Just exploring?")
+        if st.button("View with sample data"):
+            st.session_state["demo_mode"] = True
+            st.rerun()
         st.stop()
 
     allowed = st.secrets.get("ALLOWED_EMAILS", [])
@@ -32,6 +40,12 @@ def require_auth() -> None:
 
 
 def render_auth_controls() -> None:
+    if st.session_state.get("demo_mode"):
+        st.sidebar.info("Viewing with sample data")
+        if st.sidebar.button("Sign in", width="stretch"):
+            st.session_state.pop("demo_mode", None)
+            st.rerun()
+        return
     if os.environ.get("HABIT_DEV_MODE") or "auth" not in st.secrets:
         return
     if not st.user.is_logged_in:

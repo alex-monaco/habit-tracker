@@ -21,6 +21,8 @@ _LOCAL_WEEK_REVIEW_CONFIG = _REPO_ROOT / "data" / "week_review_config.json"
 
 
 def fetch_raw_habits() -> dict:
+    if st.session_state.get("demo_mode"):
+        return json.loads(_EXAMPLE_HABITS.read_text(encoding="utf-8"))
     token = _gh_token()
     if token:
         return _fetch_json_from_github(token, "habits.json")
@@ -30,6 +32,9 @@ def fetch_raw_habits() -> dict:
 
 def fetch_week_review_config() -> dict | None:
     """Return the week review config dict, or None if absent."""
+    if st.session_state.get("demo_mode"):
+        example = _REPO_ROOT / "data" / "week_review_config.example.json"
+        return json.loads(example.read_text(encoding="utf-8")) if example.exists() else None
     token = _gh_token()
     if token:
         try:

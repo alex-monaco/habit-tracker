@@ -21,7 +21,7 @@ st.title("Habit Week Review")
 
 
 @st.cache_data
-def load_data():
+def load_data(demo_mode: bool = False):
     raw = fetch_raw_habits()
     df = pd.DataFrame.from_dict(raw, orient="index")
     df.index = pd.to_datetime(df.index)
@@ -29,7 +29,7 @@ def load_data():
     return df
 
 
-df = load_data()
+df = load_data(demo_mode=st.session_state.get("demo_mode", False))
 
 # Apply habit order/filter from config
 _cfg = fetch_week_review_config()
