@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Streamlit: Run app",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "streamlit",
+            "args": [
+                "run",
+                "${workspaceFolder}/app.py"
+            ],
+            "justMyCode": true,
+            "console": "integratedTerminal",
+            "env": {
+                "HABIT_DEV_MODE": "1"
+            }
+        }
+    ]
+}

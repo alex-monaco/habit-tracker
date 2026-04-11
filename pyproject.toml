@@ -1,0 +1,25 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = [".venv", "data"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade (modernize syntax)
+    "B",   # flake8-bugbear (likely bugs)
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long — formatter handles it
+    "E712",  # `== True` / `== False` — required for pandas masks that may contain NaN
+]
+
+[tool.ruff.format]
+quote-style = "double"

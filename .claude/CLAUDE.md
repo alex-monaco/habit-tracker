@@ -1,0 +1,109 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Privacy Rules
+
+**NEVER write the following into any file in this repo:**
+- Real names, usernames, or email addresses
+- File paths containing usernames (e.g. `/Users/someone/...`)
+- API tokens, secrets, or credentials of any kind
+- GitHub repo names or URLs pointing to private repos
+- Any vault paths, iCloud paths, or machine-specific paths
+
+All secrets and personal config belong in `.streamlit/secrets.toml` (gitignored) or environment variables set outside the repo.
+
+## What This Is
+
+A personal habit analytics system: a CLI extraction script pulls daily habit data from an Obsidian vault, and a multi-page Streamlit dashboard visualizes it. The extraction script is pure-stdlib Python; the dashboard uses Streamlit, Pandas, Plotly, NumPy, and SciPy.
+
+## Project Structure
+
+```
+habit-tracker/
+├── .venv/                         # Virtual environment (Python 3.13)
+├── app.py                         # Streamlit entry point (page navigation)
+├── helpers.py                     # Shared: color constants, streak/slope/trend funcs, HTML table builder
+├── sidebar.py                     # Shared sidebar: extract + reload buttons
+├── requirements.txt
+├── __init__.py
+├── extract_habits.py              # CLI: Obsidian notes -> JSON
+├── data/
+│   ├── habits.json                # Extracted data (date -> {habit: bool})
+│   └── week_review_config.json    # Optional habit order/filter for week review
+└── pages/
+    ├── week_review.py             # Page 1: Weekly Review
+    └── historical_review.py      # Page 2: Historical Analysis
+```
+
+## Running
+
+### Extraction
+
+```bash
+python3 extract_habits.py --start 2026-01-01 --end 2026-03-31
+```
+
+- `--output`: JSON output path (default: `data/habits.json`)
+- Merges into existing output file, so you can run incrementally
+- Set `VAULT_DIR` env var to point at your Obsidian vault (e.g. in `~/.zshrc`)
+
+### Dashboard
+
+```bash
+source .venv/bin/activate  # first time: python3 -m venv .venv && pip install -r requirements.txt
+python3 -m streamlit run app.py
+```
+
+## Key Design Details
+
+### Extraction (`extract_habits.py`)
+
+- Daily notes expected at `<VAULT_DIR>/03-Resources/Calendar/Daily Notes/YYYY-MM-DD.md`
+- Parses only the `## Habits` section (assumed to be the last section in each note)
+- Habits are Obsidian callout checkboxes: `> - [x] Habit Name` or `> - [ ] Habit Name`
+- Habit names are cleaned: bold markers (`**`) stripped, trailing parentheticals removed
+- Output JSON is keyed by date string, each value is a dict of habit name -> bool
+
+### Dashboard Architecture
+
+- `app.py` uses `st.navigation()` / `st.Page()` for multi-page routing
+- `helpers.py` contains shared color constants (`RED`, `YELLOW`, `GREEN`, `MUTED`), analysis functions (`rate_color`, `compute_streak`, `compute_slope`, `trend_label`), and HTML table utilities (`TD_STYLE`, `html_table_open`, `html_table_close`)
+- `sidebar.py` is shared between pages (Streamlit puts the app directory on sys.path, so pages can `from helpers import ...` and `from sidebar import ...` directly)
+- Both pages load data via `data_loader.fetch_raw_habits()`: fetches from a private GitHub repo when `GH_TOKEN` is in secrets, otherwise reads local `data/habits.json` (falling back to `data/habits.example.json`)
+- The "Extract latest" sidebar button (local mode only) runs `extract_habits.py` for new days since the last data point, then clears cache and reruns
+
+### Page 1: Weekly Review (`week_review.py`)
+
+Focused on recent performance across three fixed windows anchored to the latest data date (not today):
+- **Week** (7 days), **Month** (28 days), **Quarter** (84 days)
+- Three color-coded Plotly heatmaps (daily columns for week/month, weekly-aggregated columns for quarter)
+- Each heatmap has an "All habits" summary row and an "Avg/wk" summary column
+- Color scale is stepped: green (>=80%), yellow (50-79%), red (<50%)
+- Per-habit trend classification: Struggling / Slipping / Improving / Okay / Solid & Steady / Not enough data
+- Trends compare recent 28-day avg to prior 56-day baseline (delta >= 0.5/wk threshold)
+- `data/week_review_config.json` optionally controls which habits appear and in what order
+
+### Page 2: Historical Analysis (`historical_review.py`)
+
+Deep statistical analysis over a user-selected date range. Two modes:
+
+**All Habits mode** (default):
+- Stats row, daily/weekly/monthly charts with moving averages
+- Per-habit breakdown table with tiers (Solid/Okay/Needs Attention), 28d/14d trend arrows, DOW best/struggle days
+- Day-of-week analysis with per-habit struggling/thriving pills and a per-habit DOW heatmap
+- Keystone habits (Welch's t-test, p<0.05): impact, consistency, breadth
+- Momentum (Fisher exact test, p<0.05): self-reinforcing habits, recovery rate, 2-day compounding
+- Correlations: phi coefficient matrix, hierarchical clustering into habit groups, notable pairs
+- Lead/lag correlations (T-1): yesterday's habit predicting today's
+- Consistency heatmap: every habit x every day
+
+**Single Habit mode** (selected via sidebar dropdown):
+- Stats, daily/weekly/monthly charts, DOW cards, momentum, weekly rhythm heatmap
+
+### Shared Patterns
+
+- All HTML tables are hand-built (not `st.dataframe`) for styling control — colored text, pills, tier headers. Use `html_table_open()` / `html_table_close()` from `helpers.py` for the boilerplate and `TD_STYLE` for cell styling
+- Color constants live in `helpers.py`: `RED` (`#f87171`), `YELLOW` (`#fbbf24`), `GREEN` (`#4ade80`), `MUTED` (`#6b7280`). Use these instead of inline hex values
+- Statistical significance threshold is p<0.05 throughout
+- Dark-mode styling: transparent backgrounds, `#222` gridlines, `#e2e8f0` text
