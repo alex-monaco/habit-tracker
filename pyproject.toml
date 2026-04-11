@@ -1,6 +1,17 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "--cov --cov-report=xml --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["."]
+omit = [".venv/*", "tests/*", "pages/*", "data/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
 
 [tool.ruff]
 line-length = 100
