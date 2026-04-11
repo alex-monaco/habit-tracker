@@ -165,7 +165,7 @@ def monthly_chart(rate_series: pd.Series):
 
 
 @st.cache_data
-def load_data() -> pd.DataFrame:
+def load_data(demo_mode: bool = False) -> pd.DataFrame:
     raw = fetch_raw_habits()
     rows = []
     for date_str, habits in raw.items():
@@ -174,7 +174,7 @@ def load_data() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-df_all = load_data()
+df_all = load_data(demo_mode=st.session_state.get("demo_mode", False))
 all_habits = sorted(df_all["habit"].unique())
 min_date = df_all["date"].min().date()
 max_date = df_all["date"].max().date()
