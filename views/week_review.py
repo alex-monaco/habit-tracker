@@ -10,7 +10,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from data_loader import fetch_raw_habits, fetch_week_review_config
+from data_loader import load_habits, load_week_review_config
 from helpers import GREEN, RED, YELLOW
 from sidebar import render_sidebar_controls
 
@@ -20,19 +20,18 @@ st.title("Habit Week Review")
 # ── Load data ─────────────────────────────────────────────────────────────────
 
 
-@st.cache_data
-def load_data(demo_mode: bool = False):
-    raw = fetch_raw_habits()
+def load_data():
+    raw = load_habits()
     df = pd.DataFrame.from_dict(raw, orient="index")
     df.index = pd.to_datetime(df.index)
     df.sort_index(inplace=True)
     return df
 
 
-df = load_data(demo_mode=st.session_state.get("demo_mode", False))
+df = load_data()
 
 # Apply habit order/filter from config
-_cfg = fetch_week_review_config()
+_cfg = load_week_review_config()
 if _cfg:
     _ordered = [h for h in _cfg.get("habits", []) if h in df.columns]
     if _ordered:

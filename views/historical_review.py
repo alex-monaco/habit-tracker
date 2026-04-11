@@ -16,7 +16,7 @@ from scipy.cluster.hierarchy import fcluster, leaves_list, linkage
 from scipy.spatial.distance import squareform
 from scipy.stats import fisher_exact, ttest_ind
 
-from data_loader import fetch_raw_habits
+from data_loader import load_habits
 from helpers import (
     GREEN,
     MUTED,
@@ -164,9 +164,8 @@ def monthly_chart(rate_series: pd.Series):
 # ── Load data ─────────────────────────────────────────────────────────────────
 
 
-@st.cache_data
-def load_data(demo_mode: bool = False) -> pd.DataFrame:
-    raw = fetch_raw_habits()
+def load_data() -> pd.DataFrame:
+    raw = load_habits()
     rows = []
     for date_str, habits in raw.items():
         for habit, done in habits.items():
@@ -174,7 +173,7 @@ def load_data(demo_mode: bool = False) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-df_all = load_data(demo_mode=st.session_state.get("demo_mode", False))
+df_all = load_data()
 all_habits = sorted(df_all["habit"].unique())
 min_date = df_all["date"].min().date()
 max_date = df_all["date"].max().date()
