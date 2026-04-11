@@ -15,7 +15,9 @@ def _client():
 
 
 def read_json(filename: str) -> dict:
-    result = _client().table("habit_data").select("data").eq("filename", filename).single().execute()
+    result = (
+        _client().table("habit_data").select("data").eq("filename", filename).single().execute()
+    )
     return result.data["data"]
 
 
