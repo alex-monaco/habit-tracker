@@ -1,9 +1,21 @@
+# OS
 .DS_Store
-**/.venv/
+
+# Python
+.venv/
 __pycache__/
 *.pyc
-.streamlit/secrets.toml
+
+# Secrets & local config
 .env
-*.log
+.streamlit/secrets.toml
+
+# Data (personal / generated)
 data/habits.json
 data/week_review_config.json
+
+# Test & lint artifacts
+.coverage
+coverage.xml
+.pytest_cache/
+.ruff_cache/
