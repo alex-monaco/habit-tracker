@@ -29,3 +29,13 @@ def require_auth() -> None:
         if st.button("Sign out"):
             st.logout()
         st.stop()
+
+
+def render_auth_controls() -> None:
+    if os.environ.get("HABIT_DEV_MODE") or "auth" not in st.secrets:
+        return
+    if not st.user.is_logged_in:
+        return
+    st.sidebar.caption(f"Signed in as {st.user.email}")
+    if st.sidebar.button("Sign out", width="stretch"):
+        st.logout()

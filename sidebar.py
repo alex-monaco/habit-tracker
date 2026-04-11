@@ -6,6 +6,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from auth import render_auth_controls
+
 _REPO_ROOT = Path(__file__).resolve().parent
 _LOCAL_DATA = _REPO_ROOT / "data" / "habits.json"
 _EXTRACT_SCRIPT = _REPO_ROOT / "extract_habits.py"
@@ -55,3 +57,5 @@ def render_sidebar_controls(max_date: date):
     if st.sidebar.button("↺ Reload data", width="stretch"):
         st.cache_data.clear()
         st.rerun()
+
+    render_auth_controls()

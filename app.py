@@ -10,8 +10,8 @@ require_auth()
 
 pg = st.navigation(
     [
-        st.Page("pages/week_review.py", title="Weekly Review", icon="📋"),
-        st.Page("pages/historical_review.py", title="Historical Analysis", icon="📊"),
+        st.Page("views/week_review.py", title="Weekly Review", icon="📋"),
+        st.Page("views/historical_review.py", title="Historical Analysis", icon="📊"),
     ]
 )
 pg.run()
