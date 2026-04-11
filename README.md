@@ -202,4 +202,4 @@ The extraction script uses only the Python standard library. The dashboard requi
 
 ## License
 
-Released under the [MIT License](LICENSE). This is a personal project — issues are welcome, but PRs are not actively reviewed.
+Released under the [MIT License](LICENSE).
