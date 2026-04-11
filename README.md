@@ -5,6 +5,7 @@
 ![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64)
 ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC)
 ![CodeQL](https://img.shields.io/badge/security-CodeQL-2088FF)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 **Live demo:** https://habit-analytics.streamlit.app/
 
@@ -198,3 +199,7 @@ The extraction script uses only the Python standard library. The dashboard requi
 - **plotly** — charts and heatmaps
 - **numpy** — array operations
 - **scipy** — statistical tests (Fisher exact, Welch's t-test) and hierarchical clustering
+
+## License
+
+Released under the [MIT License](LICENSE). This is a personal project — issues are welcome, but PRs are not actively reviewed.
