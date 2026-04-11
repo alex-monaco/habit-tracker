@@ -1,17 +1,19 @@
-"""Authentication gate. Bypassed locally when HABIT_DEV_MODE is set."""
-
-import os
+"""Authentication gate. Bypassed locally when HABIT_DEV_MODE is set in secrets.toml."""
 
 import streamlit as st
 
 
+def _dev_mode() -> bool:
+    return bool(st.secrets.get("HABIT_DEV_MODE"))
+
+
 def require_auth() -> None:
-    if os.environ.get("HABIT_DEV_MODE"):
+    if _dev_mode():
         return
 
     if "auth" not in st.secrets:
         st.error(
-            "Auth is not configured. Set HABIT_DEV_MODE=1 for local dev, "
+            "Auth is not configured. Set HABIT_DEV_MODE = true in secrets.toml for local dev, "
             "or configure [auth] in .streamlit/secrets.toml for production."
         )
         st.stop()
@@ -46,7 +48,7 @@ def render_auth_controls() -> None:
             st.session_state.pop("demo_mode", None)
             st.rerun()
         return
-    if os.environ.get("HABIT_DEV_MODE") or "auth" not in st.secrets:
+    if _dev_mode() or "auth" not in st.secrets:
         return
     if not st.user.is_logged_in:
         return

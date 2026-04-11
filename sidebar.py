@@ -1,20 +1,18 @@
 """Shared sidebar controls rendered on every page."""
 
-import subprocess
 from datetime import date, timedelta
-from pathlib import Path
 
 import streamlit as st
 
 from auth import render_auth_controls
 from data_loader import (
     can_run_extraction,
+    current_mode,
     data_source_label,
     local_habits_path,
     persist_habits_after_extract,
 )
-
-_EXTRACT_SCRIPT = Path(__file__).resolve().parent / "extract_habits.py"
+from extract_habits import extract
 
 
 def render_sidebar_controls(max_date: date):
@@ -22,34 +20,20 @@ def render_sidebar_controls(max_date: date):
     st.sidebar.divider()
 
     if can_run_extraction() and st.sidebar.button("⬇ Extract latest", width="stretch"):
-        _next_day = (max_date + timedelta(days=1)).isoformat()
-        _yesterday = (date.today() - timedelta(days=1)).isoformat()
+        _next_day = max_date + timedelta(days=1)
+        _yesterday = date.today() - timedelta(days=1)
         if _next_day <= _yesterday:
-            _result = subprocess.run(
-                [
-                    "python3",
-                    str(_EXTRACT_SCRIPT),
-                    "--start",
-                    _next_day,
-                    "--end",
-                    _yesterday,
-                    "--output",
-                    str(local_habits_path()),
-                ],
-                capture_output=True,
-                text=True,
-            )
-            if _result.returncode == 0:
-                try:
-                    persist_habits_after_extract()
-                    st.session_state["_extract_msg"] = ("success", _result.stdout.strip())
-                except Exception as e:
-                    st.session_state["_extract_msg"] = (
-                        "error",
-                        f"Extracted locally but remote sync failed: {e}",
-                    )
+            _vault_dir = st.secrets.get("VAULT_DIR", "")
+            if not _vault_dir:
+                st.session_state["_extract_msg"] = ("error", "VAULT_DIR is not set in secrets.toml.")
             else:
-                st.session_state["_extract_msg"] = ("error", _result.stderr.strip())
+                try:
+                    _summary = extract(_vault_dir, _next_day, _yesterday, local_habits_path())
+                    persist_habits_after_extract()
+                    _suffix = " and successfully uploaded to Supabase." if current_mode() == "supabase" else ""
+                    st.session_state["_extract_msg"] = ("success", _summary + _suffix)
+                except Exception as e:
+                    st.session_state["_extract_msg"] = ("error", str(e))
         else:
             st.session_state["_extract_msg"] = ("info", "Already up to date.")
         st.cache_data.clear()

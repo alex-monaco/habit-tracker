@@ -11,10 +11,7 @@
                 "${workspaceFolder}/app.py"
             ],
             "justMyCode": true,
-            "console": "integratedTerminal",
-            "env": {
-                "HABIT_DEV_MODE": "1"
-            }
+            "console": "integratedTerminal"
         }
     ]
 }
