@@ -25,12 +25,19 @@ def render_sidebar_controls(max_date: date):
         if _next_day <= _yesterday:
             _vault_dir = st.secrets.get("VAULT_DIR", "")
             if not _vault_dir:
-                st.session_state["_extract_msg"] = ("error", "VAULT_DIR is not set in secrets.toml.")
+                st.session_state["_extract_msg"] = (
+                    "error",
+                    "VAULT_DIR is not set in secrets.toml.",
+                )
             else:
                 try:
                     _summary = extract(_vault_dir, _next_day, _yesterday, local_habits_path())
                     persist_habits_after_extract()
-                    _suffix = " and successfully uploaded to Supabase." if current_mode() == "supabase" else ""
+                    _suffix = (
+                        " and successfully uploaded to Supabase."
+                        if current_mode() == "supabase"
+                        else ""
+                    )
                     st.session_state["_extract_msg"] = ("success", _summary + _suffix)
                 except Exception as e:
                     st.session_state["_extract_msg"] = ("error", str(e))

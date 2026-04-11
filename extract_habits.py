@@ -17,7 +17,7 @@ def parse_habits(filepath: Path) -> dict | None:
     if not match:
         return None
 
-    habits_text = text[match.end():]
+    habits_text = text[match.end() :]
     habits = {}
 
     for m in CHECKBOX_RE.finditer(habits_text):
