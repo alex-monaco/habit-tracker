@@ -1,6 +1,22 @@
 # Habit Tracker
 
+![Python 3.13](https://img.shields.io/badge/python-3.13-blue)
+![Streamlit](https://img.shields.io/badge/streamlit-app-FF4B4B)
+![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64)
+![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC)
+![CodeQL](https://img.shields.io/badge/security-CodeQL-2088FF)
+
+**Live demo:** https://habit-analytics.streamlit.app/
+
 A personal analytics system that extracts daily habit completion data from an Obsidian vault and surfaces it through a multi-page Streamlit dashboard. The goal is to turn a simple daily checklist into actionable insight — which habits are slipping, which ones anchor the rest of your routine, and whether this week was better than last month.
+
+## Features
+
+- **Two-page dashboard** — a Sunday-morning Weekly Review and a deep Historical Analysis page
+- **Statistical rigor** — keystone-habit detection (Welch's t-test), momentum (Fisher exact), phi-coefficient correlations with hierarchical clustering, and lead/lag pairings, all gated at p<0.05
+- **Pluggable data backends** — runs from a local JSON file, a Supabase table, or a built-in demo dataset
+- **Zero-dependency extractor** — pure-stdlib Python CLI that parses Obsidian daily notes incrementally
+- **CI-backed** — ruff, pytest with coverage, CodeQL, and Dependabot wired up out of the box
 
 ## How It Works
 
@@ -16,18 +32,23 @@ Obsidian daily notes  ──>  extract_habits.py  ──>  data/habits.json  ─
 
 ```
 habit-tracker/
-├── .venv/                         # Virtual environment (Python 3.13)
 ├── app.py                         # Streamlit entry point (page navigation)
+├── auth.py                        # Optional password gate for hosted deployments
 ├── helpers.py                     # Shared constants, analysis funcs, HTML table utilities
 ├── sidebar.py                     # Shared sidebar controls (extract + reload)
-├── requirements.txt               # Python dependencies
+├── data_loader.py                 # Backend router: demo / local / supabase
+├── supabase_sync.py               # Supabase read/write for the habit_data table
 ├── extract_habits.py              # CLI script: Obsidian notes -> JSON
+├── pyproject.toml                 # ruff + pytest + coverage config
+├── requirements.txt
 ├── data/
 │   ├── habits.json                # Extracted habit data (date -> {habit: bool})
 │   └── week_review_config.json    # Optional: habit order/filter for week review
-└── pages/
-    ├── week_review.py             # Weekly Review page
-    └── historical_review.py      # Historical Analysis page
+├── views/
+│   ├── week_review.py             # Weekly Review page
+│   └── historical_review.py       # Historical Analysis page
+├── tests/                         # pytest suite
+└── .github/workflows/             # CI + CodeQL
 ```
 
 ## Extracting Data
@@ -141,6 +162,32 @@ The historical review page also has:
   "habits": ["Morning Walk", "Exercise", "Meditate"]
 }
 ```
+
+## Data Backends
+
+`data_loader.py` routes all reads and writes through a single `current_mode()` switch, so pages and the sidebar never branch on the backend. Three modes are supported:
+
+- **`demo`** — a bundled sample dataset. Useful for hosted deployments and for trying the dashboard without any setup.
+- **`local`** (default) — reads and writes `data/habits.json`. This is what you get on a fresh clone.
+- **`supabase`** — reads and writes rows in a `habit_data` table keyed by filename. Credentials come from `st.secrets["SUPABASE_URL"]` and `st.secrets["SUPABASE_KEY"]` in `.streamlit/secrets.toml`.
+
+The "Extract latest" sidebar button is automatically hidden in modes where local extraction isn't meaningful (e.g. a cloud deploy with `REMOTE_MODE` set, or an active demo session).
+
+## Development
+
+```bash
+# install dev deps (ruff, pytest, pytest-cov are pinned in requirements.txt)
+pip install -r requirements.txt
+
+# lint + format
+ruff check .
+ruff format .
+
+# run the test suite with coverage
+pytest
+```
+
+CI runs the same `ruff check` and `pytest` on every push and PR. CodeQL scans on a weekly schedule, and Dependabot keeps GitHub Actions versions up to date.
 
 ## Dependencies
 
