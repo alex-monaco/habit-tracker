@@ -1,24 +1,18 @@
-#!/usr/bin/env python3
 """Extract habit completion data from Obsidian daily notes into JSON."""
 
-import argparse
 import json
-import os
 import re
-from datetime import datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
-_vault_env = os.environ.get("VAULT_DIR")
-VAULT_DIR = Path(_vault_env) if _vault_env else Path.home() / "ObsidianVault"
-DAILY_NOTES_DIR = VAULT_DIR / "03-Resources/Calendar/Daily Notes"
 CHECKBOX_RE = re.compile(r">\s*-\s*\[(x| )\]\s*(.+)", re.IGNORECASE)
+_NOTES_SUBPATH = "03-Resources/Calendar/Daily Notes"
 
 
 def parse_habits(filepath: Path) -> dict | None:
     """Parse habits from a daily note file. Returns None if no habits section."""
     text = filepath.read_text(encoding="utf-8")
 
-    # Find ## Habits section (always last section)
     match = re.search(r"^## Habits\s*$", text, re.MULTILINE)
     if not match:
         return None
@@ -30,7 +24,6 @@ def parse_habits(filepath: Path) -> dict | None:
         checked = m.group(1).lower() == "x"
         raw_name = m.group(2)
 
-        # Clean name: strip bold markers, trailing parenthetical, whitespace
         name = raw_name.replace("**", "")
         name = re.sub(r"\s*\(.*?\)\s*$", "", name)
         name = name.strip()
@@ -38,60 +31,39 @@ def parse_habits(filepath: Path) -> dict | None:
         if name:
             habits[name] = checked
 
-    if not habits:
-        return None
-
-    return habits
+    return habits or None
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Extract habit data from Obsidian daily notes")
-    parser.add_argument("--start", required=True, help="Start date (YYYY-MM-DD)")
-    parser.add_argument("--end", required=True, help="End date (YYYY-MM-DD)")
-    parser.add_argument(
-        "--output",
-        default="data/habits.json",
-        help="Output JSON file path (default: data/habits.json)",
-    )
-    args = parser.parse_args()
+def extract(vault_dir: str | Path, start: date, end: date, output_path: str | Path) -> str:
+    """Extract habits from vault for a date range, merging into output_path.
 
-    notes_dir = DAILY_NOTES_DIR
-    output_path = Path(args.output)
+    Returns a human-readable summary string.
+    """
+    daily_notes_dir = Path(vault_dir) / _NOTES_SUBPATH
+    output_path = Path(output_path)
 
-    start = datetime.strptime(args.start, "%Y-%m-%d").date()
-    end = datetime.strptime(args.end, "%Y-%m-%d").date()
-
-    # Load existing data if output file exists
     data = {}
     if output_path.exists():
         data = json.loads(output_path.read_text(encoding="utf-8"))
 
-    # Process each date in range
     current = start
     while current <= end:
-        date_str = current.strftime("%Y-%m-%d")
-        filepath = notes_dir / f"{date_str}.md"
-
+        date_str = current.isoformat()
+        filepath = daily_notes_dir / f"{date_str}.md"
         if filepath.exists():
             habits = parse_habits(filepath)
             if habits is not None:
                 data[date_str] = habits
-
         current += timedelta(days=1)
 
-    # Write sorted by date
     sorted_data = dict(sorted(data.items()))
     output_path.write_text(
         json.dumps(sorted_data, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
 
-    # Print summary
     dates_in_range = [d for d in sorted_data if start.isoformat() <= d <= end.isoformat()]
-    print(f"Processed {len(dates_in_range)} days ({args.start} to {args.end})")
-    print(f"Total days in file: {len(sorted_data)}")
-    print(f"Output: {output_path}")
-
-
-if __name__ == "__main__":
-    main()
+    return (
+        f"Processed {len(dates_in_range)} days ({start} to {end})\n"
+        f"Total days in file: {len(sorted_data)}"
+    )
