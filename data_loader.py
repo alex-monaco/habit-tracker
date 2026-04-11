@@ -40,7 +40,9 @@ def current_mode() -> str:
 
 
 def data_source_label() -> str:
-    return {"demo": "Data: sample", "supabase": "Data: Supabase", "local": "Data: local"}[current_mode()]
+    return {"demo": "Data: sample", "supabase": "Data: Supabase", "local": "Data: local"}[
+        current_mode()
+    ]
 
 
 def can_run_extraction() -> bool:
@@ -60,6 +62,7 @@ def fetch_raw_habits(mode: str) -> dict:
         return json.loads(_EXAMPLE_HABITS.read_text(encoding="utf-8"))
     if mode == "supabase":
         from supabase_sync import read_json
+
         return read_json(_HABITS_FILENAME)
     path = _LOCAL_HABITS if _LOCAL_HABITS.exists() else _EXAMPLE_HABITS
     return json.loads(path.read_text(encoding="utf-8"))
@@ -75,6 +78,7 @@ def fetch_week_review_config(mode: str) -> dict | None:
         )
     if mode == "supabase":
         from supabase_sync import read_json
+
         try:
             return read_json(_WEEK_REVIEW_CONFIG_FILENAME)
         except Exception:
@@ -97,4 +101,5 @@ def persist_habits_after_extract() -> None:
     if current_mode() != "supabase":
         return
     from supabase_sync import write_json
+
     write_json(_HABITS_FILENAME, json.loads(_LOCAL_HABITS.read_text(encoding="utf-8")))
