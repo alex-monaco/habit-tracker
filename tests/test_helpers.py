@@ -1,19 +1,11 @@
-"""Tests for helpers.py — pure functions, no I/O."""
+"""Tests for constants, stats, and HTML table helpers — pure functions, no I/O."""
 
 import numpy as np
 import pandas as pd
 
-from helpers import (
-    GREEN,
-    RED,
-    YELLOW,
-    compute_slope,
-    compute_streak,
-    html_table_close,
-    html_table_open,
-    rate_color,
-    trend_label,
-)
+from core.constants import GREEN, RED, YELLOW, rate_color
+from core.stats import compute_slope, compute_streak, trend_label
+from ui.html_tables import html_table_close, html_table_open
 
 # ── rate_color ────────────────────────────────────────────────────────────────
 

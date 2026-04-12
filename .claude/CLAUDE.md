@@ -23,18 +23,34 @@ A personal habit analytics system: a CLI extraction script pulls daily habit dat
 habit-tracker/
 ├── .venv/                         # Virtual environment (Python 3.13)
 ├── app.py                         # Streamlit entry point (page navigation)
-├── helpers.py                     # Shared: color constants, streak/slope/trend funcs, HTML table builder
-├── sidebar.py                     # Shared sidebar: extract + reload buttons
-├── drive_sync.py                  # Google Drive read/write helpers (service account)
-├── requirements.txt
-├── __init__.py
 ├── extract_habits.py              # CLI: Obsidian notes -> JSON
+├── requirements.txt
+├── core/                          # Bottom of dependency tree (no framework deps)
+│   ├── constants.py               # Color constants, rate_color, DOW lookups
+│   └── stats.py                   # Pure stat functions: streak, slope, trend_label
+├── analytics/                     # Pure business logic (no Streamlit)
+│   ├── week_review.py             # Window averages, trends, deltas, habit classification
+│   └── historical.py              # Per-habit stats, keystone, momentum, correlations, lead/lag
+├── charts/                        # Plotly figure builders (no Streamlit)
+│   ├── common.py                  # Shared layout & colorscale constants
+│   ├── week_review.py             # Heatmaps, bar charts for weekly review
+│   └── historical.py              # Daily/weekly/monthly charts, DOW/correlation/consistency heatmaps
+├── ui/                            # Shared Streamlit UI components
+│   ├── auth.py                    # Authentication gate + sidebar controls
+│   ├── sidebar.py                 # Extract / reload buttons, data source label
+│   └── html_tables.py             # HTML table primitives: open/close, trend cells, pills
+├── services/                      # Data access layer
+│   ├── data_loader.py             # Mode-aware data loading (local / Supabase / demo)
+│   └── supabase_sync.py           # Supabase read/write helpers
+├── views/                         # Streamlit pages (thin rendering layer)
+│   ├── week_review.py             # Page 1: Weekly Review
+│   └── historical_review.py       # Page 2: Historical Analysis
 ├── data/
 │   ├── habits.json                # Extracted data (date -> {habit: bool})
 │   └── week_review_config.json    # Optional habit order/filter for week review
-└── pages/
-    ├── week_review.py             # Page 1: Weekly Review
-    └── historical_review.py      # Page 2: Historical Analysis
+└── tests/
+    ├── test_extract_habits.py
+    └── test_helpers.py
 ```
 
 ## Running
@@ -68,11 +84,20 @@ python3 -m streamlit run app.py
 
 ### Dashboard Architecture
 
+The dashboard follows a three-layer separation of concerns:
+- **`analytics/`** — pure business logic (no Streamlit). Functions take DataFrames and return plain data structures. Testable in isolation.
+- **`charts/`** — Plotly figure builders (no Streamlit). Functions return `go.Figure` objects.
+- **`views/`** — thin Streamlit rendering layer. Wires analytics + charts into `st.*` calls and HTML tables.
+
+Core plumbing:
 - `app.py` uses `st.navigation()` / `st.Page()` for multi-page routing
-- `helpers.py` contains shared color constants (`RED`, `YELLOW`, `GREEN`, `MUTED`), analysis functions (`rate_color`, `compute_streak`, `compute_slope`, `trend_label`), and HTML table utilities (`TD_STYLE`, `html_table_open`, `html_table_close`)
-- `sidebar.py` is shared between pages (Streamlit puts the app directory on sys.path, so pages can `from helpers import ...` and `from sidebar import ...` directly)
-- Both pages load data via `data_loader.load_habits()`, which delegates to `current_mode()` (`demo` / `supabase` / `local`). Views and the sidebar must never branch on the backend — call `data_loader` functions instead.
-- `supabase_sync.py` owns all Supabase I/O (reads/writes rows in the `habit_data` table keyed by filename); credentials come from `st.secrets["SUPABASE_URL"]` / `SUPABASE_KEY`
+- `core/constants.py` has color constants (`RED`, `YELLOW`, `GREEN`, `MUTED`), `rate_color()`, and DOW lookups (`DAY_ORDER`, `DAY_ABBR`, `DAY_TO_ABBR`)
+- `core/stats.py` has pure stat functions (`compute_streak`, `compute_slope`, `trend_label`)
+- `charts/common.py` has shared Plotly layout (`DARK_LAYOUT`) and colorscale constants (`STEPPED_COLORSCALE`, `DIVERGING_COLORSCALE`, `GRADIENT_COLORSCALE`)
+- `ui/html_tables.py` has HTML table primitives (`TD_STYLE`, `html_table_open`, `html_table_close`, `trend_cell`, `habit_tags`)
+- `ui/sidebar.py` is shared between pages (Streamlit puts the app directory on sys.path)
+- Both pages load data via `services.data_loader.load_habits()`, which delegates to `current_mode()` (`demo` / `supabase` / `local`). Views and the sidebar must never branch on the backend — call `data_loader` functions instead.
+- `services/supabase_sync.py` owns all Supabase I/O (reads/writes rows in the `habit_data` table keyed by filename); credentials come from `st.secrets["SUPABASE_URL"]` / `SUPABASE_KEY`
 - The "Extract latest" sidebar button runs `extract_habits.py` to update local `data/habits.json`, then calls `data_loader.persist_habits_after_extract()` which pushes to Supabase when in that mode. The button is hidden when `data_loader.can_run_extraction()` is false (e.g. cloud deploy with `REMOTE_MODE` set, or demo session).
 
 ### Page 1: Weekly Review (`week_review.py`)
@@ -105,7 +130,7 @@ Deep statistical analysis over a user-selected date range. Two modes:
 
 ### Shared Patterns
 
-- All HTML tables are hand-built (not `st.dataframe`) for styling control — colored text, pills, tier headers. Use `html_table_open()` / `html_table_close()` from `helpers.py` for the boilerplate and `TD_STYLE` for cell styling
-- Color constants live in `helpers.py`: `RED` (`#f87171`), `YELLOW` (`#fbbf24`), `GREEN` (`#4ade80`), `MUTED` (`#6b7280`). Use these instead of inline hex values
+- All HTML tables are hand-built (not `st.dataframe`) for styling control — colored text, pills, tier headers. Use `html_table_open()` / `html_table_close()` from `ui/html_tables.py` for the boilerplate and `TD_STYLE` for cell styling
+- Color constants live in `core/constants.py`: `RED` (`#f87171`), `YELLOW` (`#fbbf24`), `GREEN` (`#4ade80`), `MUTED` (`#6b7280`). Use these instead of inline hex values
 - Statistical significance threshold is p<0.05 throughout
 - Dark-mode styling: transparent backgrounds, `#222` gridlines, `#e2e8f0` text

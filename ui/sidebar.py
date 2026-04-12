@@ -4,15 +4,15 @@ from datetime import date, timedelta
 
 import streamlit as st
 
-from auth import render_auth_controls
-from data_loader import (
+from extract_habits import extract
+from services.data_loader import (
     can_run_extraction,
     current_mode,
     data_source_label,
     local_habits_path,
     persist_habits_after_extract,
 )
-from extract_habits import extract
+from ui.auth import render_auth_controls
 
 
 def render_sidebar_controls(max_date: date):
