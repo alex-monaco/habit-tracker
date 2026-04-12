@@ -5,37 +5,44 @@ keystone habits, momentum, correlations, lead/lag, consistency heatmap) and
 a single-habit deep-dive when one is selected in the sidebar.
 """
 
-from collections import defaultdict
 from datetime import date, timedelta
 
-import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
-from scipy.cluster.hierarchy import fcluster, leaves_list, linkage
-from scipy.spatial.distance import squareform
-from scipy.stats import fisher_exact, ttest_ind
 
-from data_loader import load_habits
-from helpers import (
-    GREEN,
-    MUTED,
-    RED,
-    TD_STYLE,
-    YELLOW,
-    compute_slope,
-    compute_streak,
-    html_table_close,
-    html_table_open,
-    rate_color,
-    trend_label,
+from analytics.historical import (
+    build_correlation_display,
+    build_trend_df,
+    compute_consistency_data,
+    compute_correlations,
+    compute_dow_data,
+    compute_dow_heatmap_data,
+    compute_dow_threshold,
+    compute_keystone_habits,
+    compute_lead_lag,
+    compute_momentum,
+    compute_single_habit_momentum,
+    compute_trend_rows,
+    compute_weekly_rhythm_data,
+    validate_clusters,
 )
+from charts.historical import (
+    build_consistency_heatmap,
+    build_correlation_matrix,
+    build_daily_chart,
+    build_dow_heatmap,
+    build_monthly_chart,
+    build_weekly_chart,
+    build_weekly_rhythm,
+)
+from core.constants import GREEN, MUTED, RED, YELLOW, rate_color
+from core.stats import compute_slope, compute_streak, trend_label
+from services.data_loader import load_habits
+from ui.html_tables import TD_STYLE, habit_tags, html_table_close, html_table_open, trend_cell
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
-
-def dow_cards(series: pd.Series):
-    """Render day-of-week colored cards for a 0–100 series."""
+def _dow_cards(series: pd.Series):
+    """Render day-of-week colored cards for a 0-100 series."""
     dow_df = pd.DataFrame({"rate": series.values, "day": series.index.day_name()})
     day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     dow_avg = dow_df.groupby("day")["rate"].mean().reindex(day_order)
@@ -52,116 +59,7 @@ def dow_cards(series: pd.Series):
         )
 
 
-def daily_chart(rate_series: pd.Series, title: str):
-    """Bar + 7-day MA + 28-day MA line chart for a 0–100 rate series."""
-    ma7 = rate_series.rolling(7, min_periods=1).mean()
-    ma28 = rate_series.rolling(28, min_periods=1).mean()
-    fig = go.Figure()
-    fig.add_bar(
-        x=rate_series.index,
-        y=rate_series.values,
-        name="Daily",
-        marker_color=[rate_color(v) for v in rate_series.values],
-        opacity=0.6,
-    )
-    fig.add_scatter(
-        x=ma7.index,
-        y=ma7.values,
-        mode="lines",
-        name="7-day avg",
-        line=dict(color="#60a5fa", width=2),
-    )
-    fig.add_scatter(
-        x=ma28.index,
-        y=ma28.values,
-        mode="lines",
-        name="28-day avg",
-        line=dict(color="#f59e0b", width=2, dash="dot"),
-    )
-    fig.update_layout(
-        height=260,
-        margin=dict(t=10, b=10, l=0, r=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(range=[0, 105], ticksuffix="%", gridcolor="#222"),
-        xaxis=dict(gridcolor="#222"),
-        legend=dict(orientation="h", y=1.12),
-    )
-    st.subheader(title)
-    st.plotly_chart(fig, width="stretch")
-
-
-def weekly_chart(rate_series: pd.Series):
-    weekly = rate_series.resample("W-MON", label="left", closed="left").mean()
-    ma4 = weekly.rolling(4, min_periods=1).mean()
-    x_labels = weekly.index.strftime("W%W %b %d").tolist()
-    colors = [rate_color(v) for v in weekly.values]
-    fig = go.Figure()
-    fig.add_bar(
-        x=x_labels,
-        y=weekly.values,
-        name="Weekly",
-        marker_color=colors,
-        opacity=0.7,
-        text=[f"{v:.0f}%" for v in weekly.values],
-        textposition="outside",
-    )
-    fig.add_scatter(
-        x=x_labels,
-        y=ma4.values,
-        mode="lines",
-        name="4-week avg",
-        line=dict(color="#60a5fa", width=2),
-    )
-    fig.update_layout(
-        height=220,
-        margin=dict(t=10, b=10, l=0, r=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(range=[0, 115], ticksuffix="%", gridcolor="#222"),
-        xaxis=dict(gridcolor="#222", tickangle=-45),
-        legend=dict(orientation="h", y=1.12),
-    )
-    st.subheader("Weekly Completion Rates")
-    st.plotly_chart(fig, width="stretch")
-
-
-def monthly_chart(rate_series: pd.Series):
-    monthly = rate_series.resample("MS").mean()
-    ma3 = monthly.rolling(3, min_periods=1).mean()
-    x_labels = monthly.index.strftime("%b %Y").tolist()
-    colors = [rate_color(v) for v in monthly.values]
-    fig = go.Figure()
-    fig.add_bar(
-        x=x_labels,
-        y=monthly.values,
-        name="Monthly",
-        marker_color=colors,
-        opacity=0.7,
-        text=[f"{v:.0f}%" for v in monthly.values],
-        textposition="outside",
-    )
-    fig.add_scatter(
-        x=x_labels,
-        y=ma3.values,
-        mode="lines",
-        name="3-month avg",
-        line=dict(color="#60a5fa", width=2),
-    )
-    fig.update_layout(
-        height=220,
-        margin=dict(t=10, b=10, l=0, r=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(range=[0, 115], ticksuffix="%", gridcolor="#222"),
-        xaxis=dict(gridcolor="#222"),
-        legend=dict(orientation="h", y=1.12),
-    )
-    st.subheader("Monthly Completion Rates")
-    st.plotly_chart(fig, width="stretch")
-
-
-# ── Load data ─────────────────────────────────────────────────────────────────
+# ── Load data ────────────────────────────────────────────────────────────────
 
 
 def load_data() -> pd.DataFrame:
@@ -178,7 +76,7 @@ all_habits = sorted(df_all["habit"].unique())
 min_date = df_all["date"].min().date()
 max_date = df_all["date"].max().date()
 
-# ── Sidebar ───────────────────────────────────────────────────────────────────
+# ── Sidebar ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
     st.title("Habit Tracker")
@@ -210,12 +108,12 @@ with st.sidebar:
     st.divider()
     habit_filter = st.selectbox("Habit focus", ["All habits"] + all_habits)
 
-    from sidebar import render_sidebar_controls
+    from ui.sidebar import render_sidebar_controls
 
     render_sidebar_controls(max_date)
 
 
-# ── Filter ────────────────────────────────────────────────────────────────────
+# ── Filter ───────────────────────────────────────────────────────────────────
 
 df = df_all[(df_all["date"].dt.date >= start) & (df_all["date"].dt.date <= end)].copy()
 if df.empty:
@@ -230,12 +128,11 @@ pivot = df.pivot_table(index="date", columns="habit", values="done", aggfunc="fi
 
 if habit_filter != "All habits" and habit_filter in pivot.columns:
     h = pivot[habit_filter]
-    h_rate_series = h.fillna(False).astype(float) * 100  # 0 or 100 per day (for chart)
-    h_rate = h.mean() * 100  # skips NaN — only counts tracked days
+    h_rate_series = h.fillna(False).astype(float) * 100
+    h_rate = h.mean() * 100
     h_slope, h_r2, h_n, h_volatile = compute_slope(h_rate_series)
     h_total_change = h_slope * h_n
     h_current, h_best = compute_streak(h.fillna(False).astype(bool))
-
     h_days_tracked = int(h.notna().sum())
 
     # Stats
@@ -267,97 +164,37 @@ if habit_filter != "All habits" and habit_filter in pivot.columns:
     st.divider()
 
     # Completion over time
-    daily_chart(h_rate_series, "Completion Over Time")
-    weekly_chart(h_rate_series)
-    monthly_chart(h_rate_series)
+    st.subheader("Completion Over Time")
+    st.plotly_chart(build_daily_chart(h_rate_series), width="stretch")
+    st.subheader("Weekly Completion Rates")
+    st.plotly_chart(build_weekly_chart(h_rate_series), width="stretch")
+    st.subheader("Monthly Completion Rates")
+    st.plotly_chart(build_monthly_chart(h_rate_series), width="stretch")
     st.divider()
 
     # Day of week
     st.subheader("Day of Week")
-    dow_cards(h.astype(float) * 100)
+    _dow_cards(h.astype(float) * 100)
     st.divider()
 
     # Momentum
-    col_clean = h.dropna()
-    both = pd.DataFrame({"today": col_clean, "yesterday": col_clean.shift(1)}).dropna()
-    if len(both) >= 5:
-        p_done = both[both["yesterday"] == True]["today"].mean()
-        p_skip = both[both["yesterday"] == False]["today"].mean()
-        if not (pd.isna(p_done) or pd.isna(p_skip)):
-            st.subheader("Momentum")
-            st.caption("How likely you are to do this habit based on whether you did it yesterday")
-            m1, m2, m3 = st.columns(3)
-            momentum = (p_done - p_skip) * 100
-            m_color = GREEN if momentum > 10 else YELLOW if momentum > 0 else RED
-            m1.metric("After doing it", f"{p_done * 100:.0f}%")
-            m2.metric("After skipping it", f"{p_skip * 100:.0f}%")
-            m3.metric("Momentum score", f"{momentum:+.0f}%")
-            st.divider()
+    momentum_data = compute_single_habit_momentum(h)
+    if momentum_data:
+        st.subheader("Momentum")
+        st.caption("How likely you are to do this habit based on whether you did it yesterday")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("After doing it", f"{momentum_data['after_doing']:.0f}%")
+        m2.metric("After skipping it", f"{momentum_data['after_skipping']:.0f}%")
+        m3.metric("Momentum score", f"{momentum_data['score']:+.0f}%")
+        st.divider()
 
     # Weekly rhythm heatmap
     st.subheader("Weekly Rhythm")
     st.caption(
         "Each column is one week · rows are Mon–Sun · green = done · red = skipped · dark = not tracked"
     )
-
-    _dates = h.index
-    _week_starts = _dates - pd.to_timedelta(_dates.dayofweek, unit="D")
-    _grid_df = pd.DataFrame(
-        {
-            "week": _week_starts,
-            "dow": _dates.dayofweek,
-            "val": h.map({True: 1.0, False: -1.0}).values,
-        }
-    )
-    _week_grid = _grid_df.pivot(index="dow", columns="week", values="val").reindex(index=range(7))
-    _unique_weeks = _week_grid.columns  # DatetimeIndex of Monday dates
-    _week_labels = [f"{w.month}/{w.day}" for w in _unique_weeks]
-    _z = _week_grid.values.astype(float)
-
-    # Hover text: actual date + status per cell
-    _hover = np.empty(_z.shape, dtype=object)
-    for _ci, _ws in enumerate(_unique_weeks):
-        for _ri in range(7):
-            _d = _ws + pd.Timedelta(days=_ri)
-            _status = (
-                "no data"
-                if np.isnan(_z[_ri, _ci])
-                else ("done" if _z[_ri, _ci] == 1 else "skipped")
-            )
-            _hover[_ri, _ci] = f"{_d.strftime('%b %d, %Y')}: {_status}"
-
-    # X-axis: one label per month at its first week
-    _seen_months, _tick_x, _tick_lbl = set(), [], []
-    for _i, _w in enumerate(_unique_weeks):
-        _mk = (_w.year, _w.month)
-        if _mk not in _seen_months:
-            _seen_months.add(_mk)
-            _tick_x.append(_week_labels[_i])
-            _tick_lbl.append(_w.strftime("%b %Y"))
-
-    _fig_wr = go.Figure(
-        go.Heatmap(
-            z=_z,
-            x=_week_labels,
-            y=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-            colorscale=[[0.0, "#f87171"], [0.5, "#374151"], [1.0, "#4ade80"]],
-            zmin=-1,
-            zmax=1,
-            showscale=False,
-            xgap=3,
-            ygap=3,
-            text=_hover,
-            hovertemplate="%{text}<extra></extra>",
-        )
-    )
-    _fig_wr.update_layout(
-        height=220,
-        margin=dict(t=10, b=40, l=0, r=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(tickvals=_tick_x, ticktext=_tick_lbl, tickangle=-45),
-        yaxis=dict(autorange="reversed"),
-    )
-    st.plotly_chart(_fig_wr, width="stretch")
+    rhythm_data = compute_weekly_rhythm_data(h)
+    st.plotly_chart(build_weekly_rhythm(rhythm_data), width="stretch")
 
     st.stop()
 
@@ -387,6 +224,17 @@ trend14_overall = (
     else None
 )
 
+
+def _trend_word(delta):
+    if delta is None:
+        return "—"
+    if delta >= 10:
+        return "Improving"
+    if delta <= -10:
+        return "Declining"
+    return "Stable"
+
+
 c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric(
     "Days tracked", days_tracked, help="Number of days in the selected date range with habit data"
@@ -398,19 +246,6 @@ c3.metric(
     "Current streak", f"{current_streak}d", help="Consecutive days with ≥80% habits completed"
 )
 c4.metric("Best streak", f"{best_streak}d", help="Consecutive days with ≥80% habits completed")
-
-
-def _trend_word(delta):
-    """Map a pp delta to a one-word trend label for the stats row."""
-    if delta is None:
-        return "—"
-    if delta >= 10:
-        return "Improving"
-    if delta <= -10:
-        return "Declining"
-    return "Stable"
-
-
 c5.metric(
     "28d trend",
     _trend_word(trend28_overall),
@@ -428,111 +263,21 @@ c6.metric(
 st.divider()
 
 # Completion Charts
-daily_chart(daily_rate, "Daily Completion Rates")
-weekly_chart(daily_rate)
-monthly_chart(daily_rate)
+st.subheader("Daily Completion Rates")
+st.plotly_chart(build_daily_chart(daily_rate), width="stretch")
+st.subheader("Weekly Completion Rates")
+st.plotly_chart(build_weekly_chart(daily_rate), width="stretch")
+st.subheader("Monthly Completion Rates")
+st.plotly_chart(build_monthly_chart(daily_rate), width="stretch")
 st.divider()
 
-# Per-habit rates
+# ── Per-habit breakdown ──────────────────────────────────────────────────────
+
 st.subheader("Per-Habit Breakdown")
 
-# Compute DOW threshold from data: 75th percentile of |day_rate - habit_avg|
-# across all habit×day combinations with ≥4 occurrences
-_dow_deltas = []
-for _h in pivot.columns:
-    _c = pivot[_h].dropna().astype(float)
-    _havg = _c.mean() * 100
-    for _day, _grp in _c.groupby(_c.index.day_name()):
-        if len(_grp) >= 4:
-            _dow_deltas.append(abs(_grp.mean() * 100 - _havg))
-_DOW_THRESHOLD = float(np.percentile(_dow_deltas, 75)) if _dow_deltas else 15.0
-
-# Trend table
-trend_rows = []
-_today = date.today()
-for habit in pivot.columns:
-    col = pivot[habit]
-    rate = col.mean() * 100
-    cur, best = compute_streak(col.fillna(False).astype(bool))
-
-    done_dates = col[col == True].index
-    days_since = (_today - done_dates[-1].date()).days if len(done_dates) else None
-
-    _vals = col.dropna().astype(float)
-
-    def _window_mean(s, start, end):
-        w = s.iloc[start:end] if end else s.iloc[start:]
-        m = w.mean()
-        return None if pd.isna(m) or len(w) == 0 else float(m) * 100
-
-    # 14-day trend: last 14 days vs prior 14 days (2 complete weeks each)
-    _r14 = _window_mean(_vals, -14, None) if len(_vals) >= 14 else None
-    _p14 = _window_mean(_vals, -28, -14) if len(_vals) >= 28 else None
-    trend14 = (_r14 - _p14) if (_r14 is not None and _p14 is not None) else None
-
-    # 28-day trend: last 28 days vs prior 28 days (4 complete weeks each)
-    _r28 = _window_mean(_vals, -28, None)
-    _p28 = _window_mean(_vals, -56, -28) if len(_vals) >= 56 else None
-    trend28 = (_r28 - _p28) if (_r28 is not None and _p28 is not None) else None
-
-    # Urgency for sorting: use 28d trend if available, else 14d
-    _sort_trend = trend28 if trend28 is not None else (trend14 if trend14 is not None else 0.0)
-    urgency = 0 if _sort_trend < -10 else 2 if _sort_trend > 10 else 1
-    _tier_rate = _r28 if _r28 is not None else rate
-    tier_order = 0 if _tier_rate < 50 else 1 if _tier_rate < 80 else 2
-    tier = ["Needs Attention", "Okay", "Solid"][tier_order]
-
-    # Best days of week: days ≥15pp above habit average with ≥4 occurrences
-    _dow_abbr = {
-        "Monday": "Mon",
-        "Tuesday": "Tue",
-        "Wednesday": "Wed",
-        "Thursday": "Thu",
-        "Friday": "Fri",
-        "Saturday": "Sat",
-        "Sunday": "Sun",
-    }
-    _col_clean = col.dropna().astype(float)
-    _dow_rates = _col_clean.groupby(_col_clean.index.day_name())
-    _best_days = []
-    _struggle_days = []
-    for _day, _group in _dow_rates:
-        if len(_group) < 4:
-            continue
-        _delta = _group.mean() * 100 - rate
-        if _delta >= _DOW_THRESHOLD:
-            _best_days.append(_dow_abbr[_day])
-        elif _delta <= -_DOW_THRESHOLD:
-            _struggle_days.append(_dow_abbr[_day])
-    # Sort by day order
-    _dow_order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    _best_days = [d for d in _dow_order if d in _best_days]
-    _struggle_days = [d for d in _dow_order if d in _struggle_days]
-
-    trend_rows.append(
-        {
-            "Habit": habit,
-            "Rate": rate,
-            "Rate28": _r28,
-            "Trend14": trend14,
-            "Trend28": trend28,
-            "CurStreak": cur,
-            "BestStreak": best,
-            "DaysSince": days_since,
-            "Tier": tier,
-            "TierOrder": tier_order,
-            "Urgency": urgency,
-            "BestDays": _best_days,
-            "StruggleDays": _struggle_days,
-        }
-    )
-
-trend_df = (
-    pd.DataFrame([r for r in trend_rows if r["Rate28"] is not None])
-    .assign(Trend28Sort=lambda d: d["Trend28"].fillna(0))
-    .assign(Rate28Sort=lambda d: d["Rate28"].fillna(d["Rate"]))
-    .sort_values(["TierOrder", "Trend28Sort", "Rate28Sort"], ascending=[True, True, False])
-)
+_DOW_THRESHOLD = compute_dow_threshold(pivot)
+trend_rows = compute_trend_rows(pivot, date.today(), _DOW_THRESHOLD)
+trend_df = build_trend_df(trend_rows)
 
 _TIER_COLOR = {"Solid": GREEN, "Okay": YELLOW, "Needs Attention": RED}
 _hdr = html_table_open(
@@ -558,10 +303,8 @@ for _, row in trend_df.iterrows():
             f"{_cur_tier.upper()}</td></tr>"
         )
 
-    # 28d Rate
     _rate_html = f'<span style="color:{rate_color(row["Rate28"])}">{row["Rate28"]:.0f}%</span>'
 
-    # Streak
     _dim = f'style="color:{MUTED};font-size:0.85em"'
     if row["CurStreak"] >= 3:
         _sc = GREEN
@@ -585,19 +328,9 @@ for _, row in trend_df.iterrows():
             f"<span {_dim}>(best: {row['BestStreak']}d)</span>"
         )
 
-    # 7d / 28d trend cells
-    def _trend_cell(delta):
-        """Return an HTML span with colored arrow + pp delta for a trend cell."""
-        if delta is None or (isinstance(delta, float) and np.isnan(delta)):
-            return '<span style="color:#4b5563;font-size:0.8rem">—</span>'
-        color = GREEN if delta > 10 else RED if delta < -10 else MUTED
-        arrow = "↑" if delta > 10 else "↓" if delta < -10 else "→"
-        return f'<span style="color:{color}">{arrow} {delta:+.0f}pp</span>'
+    _trend14_html = trend_cell(row["Trend14"])
+    _trend28_html = trend_cell(row["Trend28"])
 
-    _trend14_html = _trend_cell(row["Trend14"])
-    _trend28_html = _trend_cell(row["Trend28"])
-
-    # Best days pills
     if row["BestDays"]:
         _pills = "".join(
             f'<span style="display:inline-block;margin:0 3px 2px 0;padding:1px 7px;'
@@ -607,7 +340,6 @@ for _, row in trend_df.iterrows():
     else:
         _pills = '<span style="color:#4b5563;font-size:0.8rem">—</span>'
 
-    # Struggle days pills
     if row["StruggleDays"]:
         _struggle_pills = "".join(
             f'<span style="display:inline-block;margin:0 3px 2px 0;padding:1px 7px;'
@@ -652,49 +384,12 @@ with st.expander("What do these columns mean?"):
     )
 st.divider()
 
-# Day of week
+# ── Day of week ──────────────────────────────────────────────────────────────
+
 st.subheader("Day of Week")
 
 _dow_day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-_dow_overall = daily_rate.mean()
-_dow_avg = daily_rate.groupby(daily_rate.index.day_name()).mean().reindex(_dow_day_order)
-
-# Per-habit DOW rates, counts, and overall rates (for relative deviation)
-_dow_by_habit = {}
-_habit_overall = {}
-for _h in pivot.columns:
-    _c = pivot[_h].dropna().astype(float)
-    _dow_by_habit[_h] = _c.groupby(_c.index.day_name()).mean() * 100
-    _habit_overall[_h] = _c.mean() * 100
-
-# Per-day habit pills: ≥15pp vs habit's overall average, ≥4 occurrences on that day
-_pills_per_day = {}
-for _day in _dow_day_order:
-    _day_habits = []
-    for _h in pivot.columns:
-        _col = pivot[_h].dropna().astype(float)
-        _on_day = _col[_col.index.day_name() == _day]
-        if len(_on_day) < 4:
-            continue
-        _dev = _on_day.mean() * 100 - _col.mean() * 100
-        if abs(_dev) >= _DOW_THRESHOLD:
-            _day_habits.append((_h, _dev))
-    _pills_per_day[_day] = sorted(_day_habits, key=lambda x: x[1])  # worst first
-
-
-def _habit_tags(habits, positive):
-    """Render colored pill-style HTML tags for habits deviating from their DOW average."""
-    html = ""
-    for _ph, _dev in habits:
-        if (positive and _dev > 0) or (not positive and _dev < 0):
-            _c = GREEN if positive else RED
-            html += (
-                f'<span style="display:inline-block;padding:1px 7px;margin:2px 2px;'
-                f'border-radius:10px;border:1px solid {_c};color:{_c};font-size:0.72rem" '
-                f'title="{_ph}">{_ph} {_dev:+.0f}pp</span>'
-            )
-    return html or '<span style="color:#4b5563;font-size:0.72rem">—</span>'
-
+dow_data = compute_dow_data(pivot, daily_rate, _DOW_THRESHOLD)
 
 _dow_table = html_table_open(
     [
@@ -706,24 +401,24 @@ _dow_table = html_table_open(
     ]
 )
 for _day in _dow_day_order:
-    _val = _dow_avg[_day]
+    _val = dow_data["dow_avg"][_day]
     if pd.isna(_val):
         _dow_table += (
             f'<tr><td style="{TD_STYLE}">{_day[:3]}</td>'
             f'<td style="{TD_STYLE}" colspan="4"><span style="color:#4b5563">no data</span></td></tr>'
         )
         continue
-    _delta = _val - _dow_overall
+    _delta = _val - dow_data["dow_overall"]
     _delta_col = GREEN if _delta > 2 else RED if _delta < -2 else MUTED
     _delta_str = f"{_delta:+.0f}pp"
-    _pills = _pills_per_day[_day]
+    _pills = dow_data["pills_per_day"][_day]
     _dow_table += (
         f"<tr>"
         f'<td style="{TD_STYLE};font-weight:600">{_day[:3]}</td>'
         f'<td style="{TD_STYLE};text-align:center"><span style="color:{rate_color(_val)}">{_val:.0f}%</span></td>'
         f'<td style="{TD_STYLE};text-align:center"><span style="color:{_delta_col}">{_delta_str}</span></td>'
-        f'<td style="{TD_STYLE}">{_habit_tags(_pills, positive=False)}</td>'
-        f'<td style="{TD_STYLE}">{_habit_tags(_pills, positive=True)}</td>'
+        f'<td style="{TD_STYLE}">{habit_tags(_pills, positive=False)}</td>'
+        f'<td style="{TD_STYLE}">{habit_tags(_pills, positive=True)}</td>'
         f"</tr>"
     )
 _dow_table += html_table_close()
@@ -742,129 +437,19 @@ with st.expander("What do these columns mean?"):
     )
 
 with st.expander("Per-habit breakdown by day"):
-    _day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    _day_abbr = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    _habits_dow = pivot.mean().sort_values(ascending=False).index.tolist()
-
-    _z_dow, _cell_text, _hover_text = [], [], []
-    for _h in _habits_dow:
-        _col = pivot[_h].dropna().astype(float) * 100
-        _by_rate = _col.groupby(_col.index.day_name()).mean().reindex(_day_order)
-        _by_n = _col.groupby(_col.index.day_name()).count().reindex(_day_order)
-        _z_dow.append(_by_rate.values)
-        _cell_text.append([f"{r:.0f}%" if not np.isnan(r) else "" for r in _by_rate.values])
-        _hover_text.append(
-            [
-                f"{r:.0f}% (n={int(n)})" if not np.isnan(r) else "no data"
-                for r, n in zip(_by_rate.values, _by_n.values, strict=True)
-            ]
-        )
-
-    _z_dow = np.array(_z_dow, dtype=float)
-
-    _overall_dow = daily_rate.groupby(daily_rate.index.day_name()).mean().reindex(_day_order)
-    _overall_n = daily_rate.groupby(daily_rate.index.day_name()).count().reindex(_day_order)
-    _z_dow_full = np.vstack([_z_dow, _overall_dow.values.reshape(1, -1)])
-    _y_full = _habits_dow + ["── Daily avg"]
-    _cell_text_full = _cell_text + [[f"{v:.0f}%" if not np.isnan(v) else "" for v in _overall_dow]]
-    _hover_text_full = _hover_text + [
-        [
-            f"{r:.0f}% (n={int(n)})" if not np.isnan(r) else "no data"
-            for r, n in zip(_overall_dow.values, _overall_n.values, strict=True)
-        ]
-    ]
-
-    _fig_dow = go.Figure(
-        go.Heatmap(
-            z=_z_dow_full,
-            x=_day_abbr,
-            y=_y_full,
-            colorscale=[
-                [0.0, "#f87171"],
-                [0.5, "#fbbf24"],
-                [0.8, "#4ade80"],
-                [1.0, "#4ade80"],
-            ],
-            zmin=0,
-            zmax=100,
-            showscale=False,
-            xgap=3,
-            ygap=3,
-            text=_cell_text_full,
-            texttemplate="%{text}",
-            textfont=dict(size=11, color="rgba(255,255,255,0.85)"),
-            customdata=_hover_text_full,
-            hovertemplate="%{y}<br>%{x}: %{customdata}<extra></extra>",
-        )
-    )
-    _fig_dow.update_layout(
-        height=max(200, len(_y_full) * 36),
-        margin=dict(t=10, b=10, l=0, r=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(tickfont=dict(size=12)),
-        yaxis=dict(autorange="reversed", automargin=True),
-    )
-    st.plotly_chart(_fig_dow, width="stretch")
+    dow_heatmap_data = compute_dow_heatmap_data(pivot, daily_rate)
+    st.plotly_chart(build_dow_heatmap(dow_heatmap_data), width="stretch")
 st.divider()
 
-# Keystone habits
+# ── Keystone habits ──────────────────────────────────────────────────────────
+
 st.subheader("Keystone Habits")
 st.caption(
     "Which habits, when done, reliably lift your whole routine — and which specific habits they bring with them"
 )
+
 ks_min_days = st.session_state.get("ks_min_days", 5)
-ks_rows = []
-for habit in pivot.columns:
-    # Only use rows where this habit has a recorded value
-    habit_col = pivot[habit].dropna()
-    done_idx = habit_col[habit_col == True].index
-    skip_idx = habit_col[habit_col == False].index
-    if len(done_idx) < ks_min_days or len(skip_idx) < ks_min_days:
-        continue
-    other_habits = [h for h in pivot.columns if h != habit]
-    # Compute other-habit rate only on rows where this habit is observed
-    base = pivot.loc[habit_col.index, other_habits]
-    other_rate = base.mean(axis=1) * 100
-    done_vals = other_rate[other_rate.index.isin(done_idx)].dropna().astype(float)
-    skip_vals = other_rate[other_rate.index.isin(skip_idx)].dropna().astype(float)
-    done_rate = done_vals.mean()
-    skip_rate = skip_vals.mean()
-    _, p_val = ttest_ind(done_vals, skip_vals, equal_var=False)
-    # Breadth: individual other habits significantly lifted or suppressed
-    lifted = []
-    suppressed = []
-    for other in other_habits:
-        d = base.loc[done_idx, other].dropna().astype(float)
-        s = base.loc[skip_idx, other].dropna().astype(float)
-        if len(d) >= 5 and len(s) >= 5:
-            _, p_other = ttest_ind(d, s, equal_var=False)
-            if p_other < 0.05:
-                delta = (d.mean() - s.mean()) * 100
-                if delta > 0:
-                    lifted.append((other, delta))
-                else:
-                    suppressed.append((other, delta))
-    lifted.sort(key=lambda x: x[1], reverse=True)
-    suppressed.sort(key=lambda x: x[1])
-    if p_val >= 0.05:
-        continue
-    completion_rate = habit_col.mean() * 100
-    overall_median = other_rate.median()
-    consistency = (done_vals >= overall_median).mean() * 100
-    ks_rows.append(
-        {
-            "Habit": habit,
-            "CompletionRate": completion_rate,
-            "Impact": done_rate - skip_rate,
-            "Consistency": consistency,
-            "Done Days": len(done_vals),
-            "Skip Days": len(skip_vals),
-            "p": p_val,
-            "Lifted": lifted,
-            "Suppressed": suppressed,
-            "Total": len(other_habits),
-        }
-    )
+ks_rows = compute_keystone_habits(pivot, ks_min_days)
 
 if ks_rows:
     ks_df = pd.DataFrame(ks_rows).sort_values("Impact", ascending=False)
@@ -955,51 +540,12 @@ with st.expander("Controls"):
 
 st.divider()
 
-# Momentum
+# ── Momentum ─────────────────────────────────────────────────────────────────
+
 st.subheader("Habit Momentum")
 st.caption("How strongly yesterday's outcome predicts today's — and whether streaks compound")
-mom_rows = []
-for habit in pivot.columns:
-    col = pivot[habit].dropna()
-    if len(col) < 10:
-        continue
-    both = pd.DataFrame({"today": col, "yesterday": col.shift(1)}).dropna()
-    if len(both) < 5:
-        continue
-    p_done = both[both["yesterday"] == True]["today"].mean()
-    p_skip = both[both["yesterday"] == False]["today"].mean()
-    if pd.isna(p_done) or pd.isna(p_skip):
-        continue
-    # Fisher exact test on 2x2 contingency: yesterday x today
-    n11 = int(((both["yesterday"] == True) & (both["today"] == True)).sum())
-    n10 = int(((both["yesterday"] == True) & (both["today"] == False)).sum())
-    n01 = int(((both["yesterday"] == False) & (both["today"] == True)).sum())
-    n00 = int(((both["yesterday"] == False) & (both["today"] == False)).sum())
-    _, p_val = fisher_exact([[n11, n10], [n01, n00]])
-    if p_val >= 0.05:
-        continue
-    # Streak depth: P(done today | done both yesterday and day before)
-    triple = pd.DataFrame(
-        {
-            "today": col,
-            "yesterday": col.shift(1),
-            "day_before": col.shift(2),
-        }
-    ).dropna()
-    streak_rows = triple[(triple["yesterday"] == True) & (triple["day_before"] == True)]
-    streak_rate = streak_rows["today"].mean() * 100 if len(streak_rows) >= 5 else None
-    completion_rate = col.mean() * 100
-    mom_rows.append(
-        {
-            "Habit": habit,
-            "CompletionRate": completion_rate,
-            "Momentum": (p_done - p_skip) * 100,
-            "After1": p_done * 100,
-            "Recovery": p_skip * 100,
-            "StreakRate": streak_rate,
-            "p": p_val,
-        }
-    )
+
+mom_rows = compute_momentum(pivot)
 
 if mom_rows:
     mom_df = pd.DataFrame(mom_rows).sort_values("Momentum", ascending=False)
@@ -1051,103 +597,22 @@ else:
     st.caption("No statistically significant momentum found.")
 st.divider()
 
+# ── Correlations ─────────────────────────────────────────────────────────────
 
-# Correlation matrix
 st.subheader("Habit Correlations")
-habits_list = list(pivot.columns)
-n = len(habits_list)
+
 MIN_SHARED = 20
+corr_result = compute_correlations(pivot, MIN_SHARED)
+habits_list = corr_result["habits_list"]
+cluster_labels = corr_result["cluster_labels"]
+pair_rows = corr_result["pair_rows"]
 
-
-def phi_and_p(a, b):
-    """Compute phi coefficient and Fisher exact p-value for two binary arrays."""
-    n11 = int(((a == 1) & (b == 1)).sum())
-    n10 = int(((a == 1) & (b == 0)).sum())
-    n01 = int(((a == 0) & (b == 1)).sum())
-    n00 = int(((a == 0) & (b == 0)).sum())
-    denom = ((n11 + n10) * (n01 + n00) * (n11 + n01) * (n10 + n00)) ** 0.5
-    phi = float((n11 * n00 - n10 * n01) / denom) if denom else 0.0
-    _, p = fisher_exact([[n11, n10], [n01, n00]])
-    return phi, float(p), n11, n10, n01, n00
-
-
-# Build phi matrix — NaN for insufficient data
-phi_matrix = np.full((n, n), np.nan)
-np.fill_diagonal(phi_matrix, 1.0)
-pair_rows = []
-habits_orig = list(habits_list)
-for i in range(n):
-    for j in range(i):
-        h1, h2 = habits_orig[i], habits_orig[j]
-        shared = pivot[[h1, h2]].dropna().astype(int)
-        if len(shared) < MIN_SHARED:
-            continue
-        a, b = shared[h1].values, shared[h2].values
-        phi, p, n11, n10, n01, n00 = phi_and_p(a, b)
-        phi_matrix[i][j] = phi_matrix[j][i] = phi
-        pair_rows.append(
-            {
-                "Habit A": h1,
-                "A Rate": a.mean() * 100,
-                "Habit B": h2,
-                "B Rate": b.mean() * 100,
-                "Both Done": n11 / len(a) * 100,
-                "Phi": phi,
-                "P": p,
-                "Days": len(shared),
-            }
-        )
-
-# Impute missing pairs with mean of known off-diagonal phi values
-# (better than 0 which assumes no correlation and biases clustering)
-known_phis = phi_matrix[~np.isnan(phi_matrix) & ~np.eye(n, dtype=bool)]
-impute_val = float(np.mean(known_phis)) if len(known_phis) else 0.0
-phi_imputed = np.where(np.isnan(phi_matrix), impute_val, phi_matrix)
-
-# Cluster with average linkage, cut at distance 0.7 (phi ≥ 0.3)
-# Post-hoc validate each cluster: require avg known phi ≥ 0.3
-# and ≥ 50% of pairs to have sufficient data
-cluster_labels = None
-if n > 2:
-    dist = np.clip(1 - phi_imputed, 0, 2)
-    np.fill_diagonal(dist, 0)
-    Z = linkage(squareform(dist), method="average")
-    order = leaves_list(Z)
-    cluster_labels_orig = fcluster(Z, t=0.7, criterion="distance")
-    habits_list = [habits_orig[i] for i in order]
-    cluster_labels = [int(cluster_labels_orig[i]) for i in order]
-
-# ── Habit clusters ────────────────────────────────────────────────────────────
+# Habit clusters
 if cluster_labels:
-    raw_clusters = defaultdict(list)
-    for habit, label in zip(habits_list, cluster_labels, strict=True):
-        raw_clusters[label].append(habit)
-
-    validated = []
-    for members in raw_clusters.values():
-        if len(members) < 3:
-            continue
-        pairs_total = len(members) * (len(members) - 1) / 2
-        known_phi_vals = []
-        for ii, ha in enumerate(members):
-            for jj, hb in enumerate(members):
-                if jj >= ii:
-                    continue
-                shared = pivot[[ha, hb]].dropna().astype(int)
-                if len(shared) < MIN_SHARED:
-                    continue
-                phi, _, *_ = phi_and_p(shared[ha].values, shared[hb].values)
-                known_phi_vals.append(phi)
-        if not known_phi_vals:
-            continue
-        coverage = len(known_phi_vals) / pairs_total
-        avg_phi = float(np.mean(known_phi_vals))
-        if avg_phi >= 0.3 and coverage >= 0.5:
-            validated.append((members, avg_phi))
-
+    validated = validate_clusters(cluster_labels, habits_list, pivot, MIN_SHARED)
     if validated:
         st.markdown("**Habit Groups** — habits that tend to rise and fall together")
-        for members, avg_phi in sorted(validated, key=lambda x: x[1], reverse=True):
+        for members, avg_phi in validated:
             st.markdown(
                 f"- {', '.join(f'**{h}**' for h in members)} "
                 f"<span style='color:#888;font-size:0.8rem'>avg phi {avg_phi:+.2f}</span>",
@@ -1158,23 +623,7 @@ if cluster_labels:
         )
         st.divider()
 
-# Build display matrix (lower triangle, reordered for matrix view)
-corr_display = np.full((n, n), np.nan)
-corr_text = np.full((n, n), "", dtype=object)
-for i, h1 in enumerate(habits_list):
-    for j, h2 in enumerate(habits_list):
-        if j >= i:
-            continue
-        shared = pivot[[h1, h2]].dropna().astype(int)
-        if len(shared) < MIN_SHARED:
-            corr_text[i][j] = "—"
-            continue
-        a, b = shared[h1].values, shared[h2].values
-        phi, _, *_ = phi_and_p(a, b)
-        corr_display[i][j] = phi
-        corr_text[i][j] = f"{phi:.2f}"
-
-# ── Notable pairs (significant + strong) ─────────────────────────────────────
+# Notable pairs
 if pair_rows:
     pairs_df = pd.DataFrame(pair_rows)
     notable = pairs_df[(pairs_df["Phi"].abs() >= 0.3) & (pairs_df["P"] < 0.05)].sort_values(
@@ -1183,8 +632,7 @@ if pair_rows:
     positive = notable[notable["Phi"] > 0]
     negative = notable[notable["Phi"] < 0]
 
-    def render_pairs_table(df, section_label, caption_text):
-        """Render a styled HTML table of notable habit-pair correlations."""
+    def _render_pairs_table(df, section_label, caption_text):
         rows_html = ""
         for _, row in df.iterrows():
             phi = row["Phi"]
@@ -1199,10 +647,8 @@ if pair_rows:
             )
             rows_html += (
                 f"<tr>"
-                f'<td style="{TD_STYLE}">{row["Habit A"]}'
-                f'<span style="color:{MUTED};font-size:0.8rem"> {row["A Rate"]:.0f}%</span></td>'
-                f'<td style="{TD_STYLE}">{row["Habit B"]}'
-                f'<span style="color:{MUTED};font-size:0.8rem"> {row["B Rate"]:.0f}%</span></td>'
+                f'<td style="{TD_STYLE}">{row["Habit A"]}<span style="color:{MUTED};font-size:0.8rem"> {row["A Rate"]:.0f}%</span></td>'
+                f'<td style="{TD_STYLE}">{row["Habit B"]}<span style="color:{MUTED};font-size:0.8rem"> {row["B Rate"]:.0f}%</span></td>'
                 f'<td style="{TD_STYLE};text-align:center">{row["Both Done"]:.0f}%</td>'
                 f'<td style="{TD_STYLE};text-align:center;font-weight:600;color:{color}">{phi:+.2f}</td>'
                 f'<td style="{TD_STYLE};text-align:center;color:{MUTED}">{int(row["Days"])}</td>'
@@ -1224,12 +670,12 @@ if pair_rows:
             st.caption("None with sufficient significance in the selected range.")
         st.caption(caption_text)
 
-    render_pairs_table(
+    _render_pairs_table(
         positive,
         "Habits that tend to happen together",
         "phi ≥ 0.3. Habit completion rates shown in grey. Both Done = % of shared days both completed.",
     )
-    render_pairs_table(
+    _render_pairs_table(
         negative.sort_values("Phi"),
         "Habits that rarely happen on the same day",
         "phi ≤ -0.3. Habit completion rates shown in grey. Both Done = % of shared days both completed.",
@@ -1238,72 +684,18 @@ else:
     st.caption("Not enough shared data yet — need ≥20 days per pair.")
 
 with st.expander("Show correlation matrix"):
-    fig3 = go.Figure(
-        go.Heatmap(
-            z=corr_display,
-            x=habits_list,
-            y=habits_list,
-            colorscale=[[0, "#f87171"], [0.5, "#374151"], [1, "#4ade80"]],
-            zmin=-1,
-            zmax=1,
-            text=corr_text,
-            texttemplate="%{text}",
-            hovertemplate="%{y} × %{x}: %{text}<extra></extra>",
-            showscale=True,
-            xgap=2,
-            ygap=2,
-        )
-    )
-    fig3.update_layout(
-        height=max(300, n * 45),
-        margin=dict(t=10, b=10, l=0, r=0),
-        paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=dict(tickangle=-45),
-        yaxis=dict(autorange="reversed"),
-    )
-    st.plotly_chart(fig3, width="stretch")
+    corr_display, corr_text = build_correlation_display(habits_list, pivot, MIN_SHARED)
+    st.plotly_chart(build_correlation_matrix(corr_display, corr_text, habits_list), width="stretch")
 st.divider()
 
-# Lead/Lag (T-1) Correlations
+# ── Lead/Lag ─────────────────────────────────────────────────────────────────
+
 st.subheader("Lead/Lag Correlations (T-1)")
 st.caption(
     "Does yesterday's habit predict today's? Phi coefficient between Habit A done on day T-1 and Habit B done on day T."
 )
 
-lag_rows = []
-habits_for_lag = list(pivot.columns)
-pivot_sorted = pivot.sort_index()
-
-for lead_habit in habits_for_lag:
-    for lag_habit in habits_for_lag:
-        if lead_habit == lag_habit:
-            continue
-        combined = (
-            pd.DataFrame(
-                {
-                    "lead": pivot_sorted[lead_habit].shift(1),
-                    "lag": pivot_sorted[lag_habit],
-                }
-            )
-            .dropna()
-            .astype(int)
-        )
-        if len(combined) < MIN_SHARED:
-            continue
-        a, b = combined["lead"].values, combined["lag"].values
-        phi, p, n11, n10, n01, n00 = phi_and_p(a, b)
-        lag_rows.append(
-            {
-                "Yesterday (Lead)": lead_habit,
-                "Today (Lag)": lag_habit,
-                "Lead Rate": a.mean() * 100,
-                "Lag Rate": b.mean() * 100,
-                "Both": n11 / len(a) * 100,
-                "Phi": phi,
-                "P": p,
-                "Days": len(combined),
-            }
-        )
+lag_rows = compute_lead_lag(pivot, MIN_SHARED)
 
 if lag_rows:
     lag_df = pd.DataFrame(lag_rows)
@@ -1313,8 +705,7 @@ if lag_rows:
     pos_lag = notable_lag[notable_lag["Phi"] > 0]
     neg_lag = notable_lag[notable_lag["Phi"] < 0]
 
-    def render_lag_table(df, section_label, caption_text):
-        """Render a styled HTML table of notable lead/lag correlations."""
+    def _render_lag_table(df, section_label, caption_text):
         if df.empty:
             st.markdown(f"**{section_label}**")
             st.caption("None with sufficient significance in the selected range.")
@@ -1334,10 +725,8 @@ if lag_rows:
             )
             rows_html += (
                 f"<tr>"
-                f'<td style="{TD_STYLE}">{row["Yesterday (Lead)"]}'
-                f'<span style="color:{MUTED};font-size:0.8rem"> {row["Lead Rate"]:.0f}%</span></td>'
-                f'<td style="{TD_STYLE}">{row["Today (Lag)"]}'
-                f'<span style="color:{MUTED};font-size:0.8rem"> {row["Lag Rate"]:.0f}%</span></td>'
+                f'<td style="{TD_STYLE}">{row["Yesterday (Lead)"]}<span style="color:{MUTED};font-size:0.8rem"> {row["Lead Rate"]:.0f}%</span></td>'
+                f'<td style="{TD_STYLE}">{row["Today (Lag)"]}<span style="color:{MUTED};font-size:0.8rem"> {row["Lag Rate"]:.0f}%</span></td>'
                 f'<td style="{TD_STYLE};text-align:center">{row["Both"]:.0f}%</td>'
                 f'<td style="{TD_STYLE};text-align:center;font-weight:600;color:{color}">{phi:+.2f}</td>'
                 f'<td style="{TD_STYLE};text-align:center;color:{MUTED}">{int(row["Days"])}</td>'
@@ -1356,12 +745,12 @@ if lag_rows:
         st.markdown(header + rows_html + html_table_close(), unsafe_allow_html=True)
         st.caption(caption_text)
 
-    render_lag_table(
+    _render_lag_table(
         pos_lag,
         "Yesterday's habit predicts doing today's habit",
         "phi ≥ 0.25. Yesterday's habit completion rate shown in grey next to it. Co-occur % = days both occurred.",
     )
-    render_lag_table(
+    _render_lag_table(
         neg_lag.sort_values("Phi"),
         "Yesterday's habit predicts skipping today's habit",
         "phi ≤ -0.25. A negative lead/lag relationship — worth understanding why.",
@@ -1371,64 +760,8 @@ else:
 
 st.divider()
 
-# Consistency heatmap
+# ── Consistency heatmap ──────────────────────────────────────────────────────
+
 st.subheader("Consistency Heatmap")
-habits_sorted = pivot.mean().sort_values(ascending=False).index.tolist()
-
-# Build y-axis labels: "Habit Name  82%"
-habit_rates_map = (pivot.mean() * 100).to_dict()
-y_labels = [f"{h}  {habit_rates_map[h]:.0f}%" for h in habits_sorted]
-
-# -1 = skipped, 1 = done, NaN = no data (renders as background)
-z_numeric = pivot[habits_sorted].apply(lambda col: col.map({True: 1.0, False: -1.0}))
-z_vals = z_numeric.T.values.astype(float)
-
-# Daily summary row: completion % mapped to [-1, 1] range
-daily_pct = pivot.mean(axis=1) * 100
-daily_z_row = (daily_pct.fillna(0) / 50) - 1  # 0%→-1, 50%→0, 100%→1
-daily_z_row = daily_z_row.values.reshape(1, -1).astype(float)
-daily_hover = np.array([[f"{v:.0f}% of habits done" for v in daily_pct.values]])
-
-z_combined = np.vstack([z_vals, daily_z_row])
-y_combined = y_labels + ["── Daily total"]
-custom_habit = np.where(np.isnan(z_vals), "no data", np.where(z_vals == 1, "done", "skipped"))
-custom_combined = np.vstack([custom_habit, daily_hover])
-
-colorscale = [
-    [0.0, "#f87171"],  # -1 → red
-    [0.5, "#374151"],  #  0 → gray
-    [1.0, "#4ade80"],  #  1 → green
-]
-
-# Month boundary ticks
-date_strs = pivot.index.strftime("%Y-%m-%d").tolist()
-month_starts = pivot.index[pivot.index.to_series().dt.day == 1]
-if len(month_starts) >= 1:
-    tick_vals = month_starts.strftime("%Y-%m-%d").tolist()
-    tick_text = [d.strftime("%b %Y") for d in month_starts]
-else:
-    tick_vals = tick_text = None
-
-fig4 = go.Figure(
-    go.Heatmap(
-        z=z_combined,
-        x=date_strs,
-        y=y_combined,
-        colorscale=colorscale,
-        zmin=-1,
-        zmax=1,
-        showscale=False,
-        xgap=2,
-        ygap=2,
-        hovertemplate="%{y}<br>%{x}: %{customdata}<extra></extra>",
-        customdata=custom_combined,
-    )
-)
-fig4.update_layout(
-    height=max(200, len(y_combined) * 28),
-    margin=dict(t=10, b=10, l=0, r=0),
-    paper_bgcolor="rgba(0,0,0,0)",
-    xaxis=dict(tickvals=tick_vals, ticktext=tick_text, tickangle=-45),
-    yaxis=dict(autorange="reversed"),
-)
-st.plotly_chart(fig4, width="stretch")
+consistency_data = compute_consistency_data(pivot)
+st.plotly_chart(build_consistency_heatmap(consistency_data), width="stretch")

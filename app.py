@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from auth import require_auth
+from ui.auth import require_auth
 
 st.set_page_config(page_title="Habit Tracker", layout="wide")
 

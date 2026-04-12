@@ -14,7 +14,7 @@ from pathlib import Path
 
 import streamlit as st
 
-_REPO_ROOT = Path(__file__).resolve().parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 _DATA_DIR = _REPO_ROOT / "data"
 _LOCAL_HABITS = _DATA_DIR / "habits.json"
 _EXAMPLE_HABITS = _DATA_DIR / "habits.example.json"
@@ -61,7 +61,7 @@ def fetch_raw_habits(mode: str) -> dict:
     if mode == "demo":
         return json.loads(_EXAMPLE_HABITS.read_text(encoding="utf-8"))
     if mode == "supabase":
-        from supabase_sync import read_json
+        from services.supabase_sync import read_json
 
         return read_json(_HABITS_FILENAME)
     path = _LOCAL_HABITS if _LOCAL_HABITS.exists() else _EXAMPLE_HABITS
@@ -77,7 +77,7 @@ def fetch_week_review_config(mode: str) -> dict | None:
             else None
         )
     if mode == "supabase":
-        from supabase_sync import read_json
+        from services.supabase_sync import read_json
 
         try:
             return read_json(_WEEK_REVIEW_CONFIG_FILENAME)
@@ -100,6 +100,6 @@ def persist_habits_after_extract() -> None:
     """Push the freshly-extracted local habits.json to the remote backend, if any."""
     if current_mode() != "supabase":
         return
-    from supabase_sync import write_json
+    from services.supabase_sync import write_json
 
     write_json(_HABITS_FILENAME, json.loads(_LOCAL_HABITS.read_text(encoding="utf-8")))

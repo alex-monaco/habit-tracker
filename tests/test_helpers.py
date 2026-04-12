@@ -1,19 +1,10 @@
-"""Tests for helpers.py — pure functions, no I/O."""
+"""Tests for core/constants.py and core/stats.py — pure functions, no I/O."""
 
 import numpy as np
 import pandas as pd
 
-from helpers import (
-    GREEN,
-    RED,
-    YELLOW,
-    compute_slope,
-    compute_streak,
-    html_table_close,
-    html_table_open,
-    rate_color,
-    trend_label,
-)
+from core.constants import GREEN, RED, YELLOW, rate_color
+from core.stats import compute_slope, compute_streak, trend_label
 
 # ── rate_color ────────────────────────────────────────────────────────────────
 
@@ -177,44 +168,3 @@ class TestTrendLabel:
         assert trend_label(10.0) == "↑ Improving"
         assert trend_label(-10.0) == "↓ Declining"
         assert trend_label(0.0) == "→ Stable"
-
-
-# ── html_table_open / html_table_close ───────────────────────────────────────
-
-
-class TestHtmlTable:
-    def test_open_contains_column_labels(self):
-        html = html_table_open([("Habit", "left"), ("Rate", "center")])
-        assert "Habit" in html
-        assert "Rate" in html
-
-    def test_open_contains_alignment(self):
-        html = html_table_open([("Score", "right")])
-        assert "text-align:right" in html
-
-    def test_open_has_table_tag(self):
-        html = html_table_open([("A", "left")])
-        assert html.startswith("<table")
-
-    def test_open_has_thead_and_tbody(self):
-        html = html_table_open([("A", "left")])
-        assert "<thead>" in html
-        assert "<tbody>" in html
-
-    def test_open_multiple_columns(self):
-        cols = [("Name", "left"), ("Streak", "center"), ("Trend", "right")]
-        html = html_table_open(cols)
-        for label, _ in cols:
-            assert label in html
-
-    def test_close_returns_closing_tags(self):
-        html = html_table_close()
-        assert "</tbody>" in html
-        assert "</table>" in html
-
-    def test_open_close_form_valid_structure(self):
-        html = html_table_open([("X", "left")]) + "<tr><td>val</td></tr>" + html_table_close()
-        assert html.count("<table") == 1
-        assert html.count("</table>") == 1
-        assert html.count("<tbody>") == 1
-        assert html.count("</tbody>") == 1
