@@ -1,10 +1,7 @@
 """Tests for ui/html_tables.py — table primitives, trend cells, and habit pills."""
 
-import numpy as np
-
 from core.constants import GREEN, MUTED, RED
 from ui.html_tables import habit_tags, html_table_close, html_table_open, trend_cell
-
 
 # ── html_table_open / html_table_close ───────────────────────────────────────
 

@@ -23,7 +23,6 @@ from analytics.historical import (
     validate_clusters,
 )
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -130,17 +129,31 @@ class TestComputeTrendRows:
 
 class TestBuildTrendDf:
     def test_single_row_passes_through(self):
-        rows = [{"Habit": "X", "Rate": 50, "Rate28": 50.0, "Trend28": 0.0, "TierOrder": 1, "Urgency": 1}]
+        rows = [
+            {"Habit": "X", "Rate": 50, "Rate28": 50.0, "Trend28": 0.0, "TierOrder": 1, "Urgency": 1}
+        ]
         result = build_trend_df(rows)
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 1
 
     def test_rows_sorted_by_tier(self):
         rows = [
-            {"Habit": "Good", "Rate": 90, "Rate28": 90.0, "Trend28": 5.0,
-             "TierOrder": 2, "Urgency": 1},
-            {"Habit": "Bad", "Rate": 30, "Rate28": 30.0, "Trend28": -5.0,
-             "TierOrder": 0, "Urgency": 0},
+            {
+                "Habit": "Good",
+                "Rate": 90,
+                "Rate28": 90.0,
+                "Trend28": 5.0,
+                "TierOrder": 2,
+                "Urgency": 1,
+            },
+            {
+                "Habit": "Bad",
+                "Rate": 30,
+                "Rate28": 30.0,
+                "Trend28": -5.0,
+                "TierOrder": 0,
+                "Urgency": 0,
+            },
         ]
         result = build_trend_df(rows)
         assert result.iloc[0]["Habit"] == "Bad"  # TierOrder 0 first (ascending)
@@ -202,7 +215,6 @@ class TestComputeKeystoneHabits:
 
     def test_with_correlated_habits(self):
         # A is a keystone: when A is done, B and C are done too
-        n = 60
         a = [True] * 40 + [False] * 20
         b = [True] * 40 + [False] * 20  # follows A exactly
         c = [True] * 40 + [False] * 20

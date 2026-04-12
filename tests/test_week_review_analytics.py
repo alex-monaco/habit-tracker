@@ -1,6 +1,6 @@
 """Tests for analytics/week_review.py — pure business logic, no I/O."""
 
-from datetime import date, timedelta
+from datetime import date
 
 import pandas as pd
 
@@ -18,7 +18,6 @@ from analytics.week_review import (
     window_avg,
     window_delta,
 )
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -96,8 +95,7 @@ class TestDaysAbove80:
     def test_mixed_rates(self):
         # 5 habits, only 3 True on each day -> 60% < 80%, so 0 days above 80
         df = _make_df(
-            {f"H{i}": [True] * 7 for i in range(3)}
-            | {f"L{i}": [False] * 7 for i in range(2)},
+            {f"H{i}": [True] * 7 for i in range(3)} | {f"L{i}": [False] * 7 for i in range(2)},
             date(2026, 3, 1),
         )
         result = days_above_80(df, date(2026, 3, 7), 7)
