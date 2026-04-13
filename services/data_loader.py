@@ -32,6 +32,7 @@ def local_habits_path() -> Path:
     """Path where extract_habits.py should write its output."""
     return _LOCAL_HABITS
 
+
 def data_mode() -> str:
     """Return the data access mode: 'demo', 'supabase', or 'local'."""
     if not is_authenticated():

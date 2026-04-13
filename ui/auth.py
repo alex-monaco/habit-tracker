@@ -8,10 +8,7 @@ def is_authenticated() -> bool:
     if st.secrets.get("HABIT_DEV_MODE"):
         return True
     try:
-        return (
-            st.user.is_logged_in
-            and st.user.email in st.secrets.get("ALLOWED_EMAILS", [])
-        )
+        return st.user.is_logged_in and st.user.email in st.secrets.get("ALLOWED_EMAILS", [])
     except AttributeError:
         return False
 
