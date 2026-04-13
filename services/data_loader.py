@@ -1,18 +1,21 @@
 """Loads habit data from local disk (dev), Supabase (prod), or example files (demo).
 
-Mode is determined internally:
-- `demo`: session has `demo_mode` flag set (anonymous visitor)
-- `supabase`: `SUPABASE_URL` is in st.secrets
-- `local`: fallback, reads `data/habits.json` (or example file if absent)
+Mode is determined by data_mode():
+- `demo`: unauthenticated or demo session
+- `supabase`: authenticated + SUPABASE_URL configured
+- `local`: authenticated, local dev fallback
 
 Views and the sidebar should never branch on the backend themselves — call
 the functions here and let this module handle it.
 """
 
 import json
+from datetime import date, timedelta
 from pathlib import Path
 
 import streamlit as st
+
+from ui.auth import is_authenticated
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DATA_DIR = _REPO_ROOT / "data"
@@ -29,10 +32,9 @@ def local_habits_path() -> Path:
     """Path where extract_habits.py should write its output."""
     return _LOCAL_HABITS
 
-
-def current_mode() -> str:
-    """Return 'demo', 'supabase', or 'local'."""
-    if st.session_state.get("demo_mode"):
+def data_mode() -> str:
+    """Return the data access mode: 'demo', 'supabase', or 'local'."""
+    if not is_authenticated():
         return "demo"
     if hasattr(st, "secrets") and st.secrets.get("SUPABASE_URL"):
         return "supabase"
@@ -40,8 +42,9 @@ def current_mode() -> str:
 
 
 def data_source_label() -> str:
+
     return {"demo": "Data: sample", "supabase": "Data: Supabase", "local": "Data: local"}[
-        current_mode()
+        data_mode()
     ]
 
 
@@ -50,7 +53,8 @@ def can_run_extraction() -> bool:
 
     Cloud deployments set REMOTE_MODE in secrets to disable the extract button.
     """
-    if st.session_state.get("demo_mode"):
+
+    if data_mode() == "demo":
         return False
     return not (hasattr(st, "secrets") and st.secrets.get("REMOTE_MODE"))
 
@@ -89,16 +93,47 @@ def fetch_week_review_config(mode: str) -> dict | None:
 
 
 def load_habits() -> dict:
-    return fetch_raw_habits(current_mode())
+
+    return fetch_raw_habits(data_mode())
 
 
 def load_week_review_config() -> dict | None:
-    return fetch_week_review_config(current_mode())
+
+    return fetch_week_review_config(data_mode())
 
 
-def persist_habits_after_extract() -> None:
+def run_extraction() -> tuple[str, str]:
+    """Extract new habits from the vault and persist them.
+
+    Returns (level, message) where level is 'success', 'error', or 'info'.
+    """
+    habits = load_habits()
+    max_date = max(date.fromisoformat(d) for d in habits)
+    next_day = max_date + timedelta(days=1)
+    yesterday = date.today() - timedelta(days=1)
+
+    if next_day > yesterday:
+        return ("info", "Already up to date.")
+
+    vault_dir = st.secrets.get("VAULT_DIR", "")
+    if not vault_dir:
+        return ("error", "VAULT_DIR is not set in secrets.toml.")
+
+    from extract_habits import extract
+
+    try:
+        summary = extract(vault_dir, next_day, yesterday, _LOCAL_HABITS)
+        _persist_habits_after_extract()
+        if data_mode() == "supabase":
+            summary += " and successfully uploaded to Supabase."
+        return ("success", summary)
+    except Exception as e:
+        return ("error", str(e))
+
+
+def _persist_habits_after_extract() -> None:
     """Push the freshly-extracted local habits.json to the remote backend, if any."""
-    if current_mode() != "supabase":
+    if data_mode() != "supabase":
         return
     from services.supabase_sync import write_json
 

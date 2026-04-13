@@ -3,12 +3,22 @@
 import streamlit as st
 
 
-def _dev_mode() -> bool:
-    return bool(st.secrets.get("HABIT_DEV_MODE"))
+def is_authenticated() -> bool:
+    """True for real authorized users or dev mode."""
+    if st.secrets.get("HABIT_DEV_MODE"):
+        return True
+    try:
+        return (
+            st.user.is_logged_in
+            and st.user.email in st.secrets.get("ALLOWED_EMAILS", [])
+        )
+    except AttributeError:
+        return False
 
 
 def require_auth() -> None:
-    if _dev_mode():
+    """Gate: blocks unauthorized users. Unauthenticated users see demo data automatically."""
+    if is_authenticated():
         return
 
     if "auth" not in st.secrets:
@@ -18,40 +28,8 @@ def require_auth() -> None:
         )
         st.stop()
 
-    if st.session_state.get("demo_mode"):
-        return
-
-    if not st.user.is_logged_in:
-        st.title("Habit Tracker")
-        st.write("Sign in to continue.")
-        if st.button("Sign in with Google"):
-            st.login()
-        st.divider()
-        st.caption("Just exploring?")
-        if st.button("View with sample data"):
-            st.session_state["demo_mode"] = True
-            st.rerun()
-        st.stop()
-
-    allowed = st.secrets.get("ALLOWED_EMAILS", [])
-    if st.user.email not in allowed:
+    if st.user.is_logged_in and st.user.email not in st.secrets.get("ALLOWED_EMAILS", []):
         st.error(f"{st.user.email} is not authorized to view this app.")
         if st.button("Sign out"):
             st.logout()
         st.stop()
-
-
-def render_auth_controls() -> None:
-    if st.session_state.get("demo_mode"):
-        st.sidebar.info("Viewing with sample data")
-        if st.sidebar.button("Sign in", width="stretch"):
-            st.session_state.pop("demo_mode", None)
-            st.rerun()
-        return
-    if _dev_mode() or "auth" not in st.secrets:
-        return
-    if not st.user.is_logged_in:
-        return
-    st.sidebar.caption(f"Signed in as {st.user.email}")
-    if st.sidebar.button("Sign out", width="stretch"):
-        st.logout()

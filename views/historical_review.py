@@ -110,7 +110,7 @@ with st.sidebar:
 
     from ui.sidebar import render_sidebar_controls
 
-    render_sidebar_controls(max_date)
+    render_sidebar_controls()
 
 
 # ── Filter ───────────────────────────────────────────────────────────────────
