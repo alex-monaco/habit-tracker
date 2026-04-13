@@ -53,7 +53,7 @@ last_date = df.index.max().date()
 week_start = last_date - timedelta(days=6)
 week = df[(df.index.date >= week_start) & (df.index.date <= last_date)]
 
-render_sidebar_controls(last_date)
+render_sidebar_controls()
 
 if week.empty:
     st.warning("No data for the last 7 days.")
