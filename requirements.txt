@@ -1,5 +1,5 @@
 streamlit==1.56.0
-Authlib==1.6.9
+Authlib==1.7.0
 requests==2.33.1
 supabase==2.28.3
 pandas==3.0.2
