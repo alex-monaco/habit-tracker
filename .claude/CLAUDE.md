@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Before Committing
+
+Run `just check` before creating a commit. It runs ruff lint, ruff format check, and pytest — the same checks as CI.
+
 ## Privacy Rules
 
 **NEVER write the following into any file in this repo:**

@@ -139,3 +139,28 @@ def _persist_habits_after_extract() -> None:
     from services.supabase_sync import write_json
 
     write_json(_HABITS_FILENAME, json.loads(_LOCAL_HABITS.read_text(encoding="utf-8")))
+
+
+def can_push_week_review_config() -> bool:
+    return data_mode() == "supabase"
+
+
+def push_week_review_config() -> tuple[str, str]:
+    """Push local week_review_config.json to Supabase.
+
+    Returns (level, message) where level is 'success' or 'error'.
+    """
+    if data_mode() != "supabase":
+        return ("error", "Not in Supabase mode.")
+    if not _LOCAL_WEEK_REVIEW_CONFIG.exists():
+        return ("error", "No local week_review_config.json found.")
+    from services.supabase_sync import write_json
+
+    try:
+        write_json(
+            _WEEK_REVIEW_CONFIG_FILENAME,
+            json.loads(_LOCAL_WEEK_REVIEW_CONFIG.read_text(encoding="utf-8")),
+        )
+        return ("success", "Habit config uploaded to Supabase.")
+    except Exception as e:
+        return ("error", str(e))

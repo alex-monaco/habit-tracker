@@ -3,8 +3,10 @@
 import streamlit as st
 
 from services.data_loader import (
+    can_push_week_review_config,
     can_run_extraction,
     data_source_label,
+    push_week_review_config,
     run_extraction,
 )
 from ui.auth import is_authenticated
@@ -27,6 +29,17 @@ def render_sidebar_controls():
 
     if "_extract_msg" in st.session_state:
         level, msg = st.session_state.pop("_extract_msg")
+        _MSG_RENDERERS[level](msg)
+
+    if can_push_week_review_config() and st.sidebar.button(
+        "↑ Upload habit config", width="stretch"
+    ):
+        st.session_state["_config_msg"] = push_week_review_config()
+        st.cache_data.clear()
+        st.rerun()
+
+    if "_config_msg" in st.session_state:
+        level, msg = st.session_state.pop("_config_msg")
         _MSG_RENDERERS[level](msg)
 
     if st.sidebar.button("↺ Reload data", width="stretch"):
