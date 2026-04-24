@@ -142,7 +142,9 @@ def _persist_habits_after_extract() -> None:
 
 
 def can_push_week_review_config() -> bool:
-    return data_mode() == "supabase"
+    if data_mode() != "supabase":
+        return False
+    return not (hasattr(st, "secrets") and st.secrets.get("REMOTE_MODE"))
 
 
 def push_week_review_config() -> tuple[str, str]:
