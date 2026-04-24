@@ -31,7 +31,9 @@ def render_sidebar_controls():
         level, msg = st.session_state.pop("_extract_msg")
         _MSG_RENDERERS[level](msg)
 
-    if can_push_week_review_config() and st.sidebar.button("↑ Upload habit config", width="stretch"):
+    if can_push_week_review_config() and st.sidebar.button(
+        "↑ Upload habit config", width="stretch"
+    ):
         st.session_state["_config_msg"] = push_week_review_config()
         st.cache_data.clear()
         st.rerun()

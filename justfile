@@ -24,6 +24,11 @@ lint:
 fmt:
     {{python}} -m ruff format .
 
+check:
+    {{python}} -m ruff check .
+    {{python}} -m ruff format --check .
+    {{python}} -m pytest
+
 clean:
     rm -rf __pycache__ .pytest_cache
     find . -type d -name __pycache__ -exec rm -rf {} +
