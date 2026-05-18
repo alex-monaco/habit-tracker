@@ -1,6 +1,6 @@
 streamlit==1.57.0
 Authlib==1.7.0
-requests==2.33.1
+requests==2.34.2
 supabase==2.29.0
 pandas==3.0.2
 numpy==2.4.4
